@@ -63,16 +63,25 @@ def registerData(df):
     
     match response['Ação']:
         case 0:
+            print(new_df['Descrição'] == response['Descrição'])
+            print(new_df['Valor'] == response['Valor'])
+            print(new_df['Data do registro'] == response['Data'])
+            print(new_df['Tipo'] == response['Tipo'])
+            print(new_df['Data de Pagamento'] == response['Data de Pagamento'])
+            # A comparação da coluna valor está errada, a IA retorna um valor em reais R$, enquanto na planilha está só o número
+
             filtro = (
-            new_df['Descrição'] == response['Descrição'] & 
-            new_df['Valor'] == response['Valor'] & 
-            new_df['Data do registro'] == response['Data'] & 
-            new_df['Tipo'] == response['Tipo'] &
-            new_df['Data de Pagamento'], response['Data de Pagamento']
+            (new_df['Descrição'] == response['Descrição']) & 
+            (new_df['Valor'] == response['Valor']) & 
+            (new_df['Data do registro'] == response['Data']) & 
+            (new_df['Tipo'] == response['Tipo']) &
+            (new_df['Dia de Pagamento'] == response['Dia de Pagamento'])
             )
 
+            print(new_df)
             new_df = new_df.drop(new_df[filtro].index)
-            
+            print(new_df)
+
         case 1:
             new_df.loc[n, 'Descrição'] = response['Descrição']
             new_df.loc[n, 'Valor'] = float(response['Valor'].split('R$ ')[1].replace(',', '.'))
