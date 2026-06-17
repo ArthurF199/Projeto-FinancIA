@@ -1,6 +1,29 @@
 import pandas as pd
 import ia
 import json
+import os
+import time
+from datetime import datetime
+
+
+def saveXLSX(df):
+    try:
+        while True:
+            if input('Deseja salvar as informações? [S/N]') in 'Ss':
+                df.to_excel('data.xlsx', index=False)
+                clear()
+                break
+            elif input('Deseja salvar as informações? [S/N]') in 'Nn':
+                clear()
+                break
+            else:
+                print('Input Incorreto!')
+    except Exception as e:
+        print(f'Input Incorreto {e}')
+
+
+def clear():
+    os.system('cls' if os.name == 'nt' else 'clear')
 
 
 def title(title: str):
@@ -13,9 +36,11 @@ def options(options: list):
     return int(input('Digite o número da opção desejada: '))
 
 
-def registerData(df):
+def registerData(df, prompt):
     title('Adicionar receita')
     response = ia.Gemma4(f"""
+              Hoje: {datetime.now().strftime("%d/%m%Y")}             
+            
               Vou te enviar uma descrição de um registro.
               Quero que você determine se o usuário quer adicionar ou remover uma receita e me retorne um JSON com os seguintes campos:
               - Ação: Adicionar/remover o registro, deixe 0 para remover e 1 para adicionar um dado à planilha
@@ -25,7 +50,7 @@ def registerData(df):
               - Valor: o valor da receita, seguindo o formato R$ 000.00.
                 (caso não seja informada, escreva null no campo)
               - Data: a data do registro, seguindo o formato DD-MM-AAAA
-                (caso a data não for informada, escreva null no campo)         
+                (caso a data não for informada, considere como hoje)         
               - Tipo: se é entrada ou saída ou conta.
                 (caso não for informada, escreva null no campo)
               - Dia de pagamento: somente se for descrito como uma conta, siga o mesmo formato do campo Data(DD-MM-AA)
@@ -52,8 +77,8 @@ def registerData(df):
               
               Entrada: Recebi um dinheiro de um freela.
               Saída: "Ação": 1, "Descrição": "Freelance", "Valor": null, "Data": null, "Tipo": "Entrada", "Dia de Pagamento": null
-              {"Descrição"}
-              A descrição do registro é: {input('Usuário: ')}
+
+              A descrição do registro é: {prompt}
     """, 1000)
 
     print(repr(response))
@@ -67,50 +92,114 @@ def registerData(df):
             print(new_df['Valor'] == response['Valor'])
             print(new_df['Data do registro'] == response['Data'])
             print(new_df['Tipo'] == response['Tipo'])
-            print(new_df['Data de Pagamento'] == response['Data de Pagamento'])
-            # A comparação da coluna valor está errada, a IA retorna um valor em reais R$, enquanto na planilha está só o número
+            print(new_df['Dia de Pagamento'] == response['Dia de Pagamento'])
+            
 
             filtro = (
-            (new_df['Descrição'] == response['Descrição']) & 
-            (new_df['Valor'] == response['Valor']) & 
-            (new_df['Data do registro'] == response['Data']) & 
-            (new_df['Tipo'] == response['Tipo']) &
-            (new_df['Dia de Pagamento'] == response['Dia de Pagamento'])
+            (new_df['Descrição'].str.lower() == response['Descrição'].lower()) & 
+            (new_df['Valor'].str.lower() == response['Valor'].lower()) & 
+            (new_df['Data do registro'].str.lower() == response['Data'].lower()) & 
+            (new_df['Tipo'].str.lower() == response['Tipo'].lower()) &
+            (new_df['Dia de Pagamento'].str.lower() == response['Dia de Pagamento'].lower())
             )
+
+            print(type(response['Data']))
+            print(type(new_df['Data do registro']))
+            print(new_df['Data do registro'].dtype)
 
             print(new_df)
             new_df = new_df.drop(new_df[filtro].index)
+            print(new_df[filtro])
             print(new_df)
 
         case 1:
             new_df.loc[n, 'Descrição'] = response['Descrição']
-            new_df.loc[n, 'Valor'] = float(response['Valor'].split('R$ ')[1].replace(',', '.'))
+            new_df.loc[n, 'Valor'] = response['Valor']
             new_df.loc[n, 'Data do registro'] = response['Data']
             new_df.loc[n, 'Tipo'] = response['Tipo']
             new_df.loc[n, 'Dia de Pagamento'] = response['Dia de Pagamento']
-    return new_df
+    return (new_df, response['Ação'])
 
 
+clear()
 while True:
     df = pd.read_excel('data.xlsx')
     title('FinancIA: Gestor Financeiro')
-    match options(['Analisar a planilha', 'register', 'Visualisar Planilha', 'Viver de Renda', 'Sair']):
+    match options(['Registrar Salário', 'Analisar a planilha', 'Registrar/Remover Dados', 'Visualisar Planilha', 'Reserva de Emergência','Viver de Renda', 'Sair']):
         case 1:
-            print(ia.Gemma4('Analise o dataframe e me diga o que você acha, responda de forma direta, sem criar tópicos ou textos muito grandes.', 300))
-            break
+            clear()
+            df['Salário'] = 'R$ ' + input('Qual o seu salário: R$')
+            saveXLSX(df)
         case 2:
+            clear()
+            title('Análise da planilha')
+            print('Carregando...')
+            response = ia.Gemma4(f'Analise o dataframe: {df} e me se eu estou fazendo um bom gerenciamento do meu dinheiro e me dê sugestões do que eu deveria fazer, responda de forma direta, sem criar tópicos ou textos muito grandes.', 1000)
+            clear()
+            title('Análise da planilha')
+            if response is not None or not '':
+                print(response)
+            else:
+                print('Erro, tente novamente.')
+                continue
+        case 3:
             try:
-                unsaved_df = registerData(df)
+                clear()
+                title('Registro de dados')
+                temp = registerData(df, input('Descreva o registro: ')) # temp solution
+                unsaved_df = temp[0]
+                action = temp[1]
+                del temp
 
-                unsaved_df.to_excel('data.xlsx', index=False) # Unsaved DataFrame
+                match action:
+                    case 0:
+                        print('Receita removida com sucesso!') 
+                    case 1:
+                        print('Receita adicionada com sucesso!') 
+                saveXLSX(unsaved_df) # Unsaved DataFrame
                 df = unsaved_df # Saved Dataframe
-                print('Receita adicionada com sucesso!')            
+
             except PermissionError as e:
                 print(f'Erro de permissão. Sua planilha está aberta, feche-a para que possa ser modificada. [{e}]')
                 print(df)
             except Exception as e:
                 print(f'Ocorreu um erro ao adicionar a receita: {e}')
-        case 3:
-            print(df.to_string(index=False))
         case 4:
+            clear()
+            title('Visualição da Planilha')
+            print(df.to_string(index=False))
+        case 5:
+            clear()
+            df['Reserva de Emergência'] = (
+                df['Salário']
+                .str.strip()
+                .str.replace('R$', '')
+                .astype(int) * 6
+            ).apply(lambda x: f"R$ {x}")
+
+            clear()
+            title('Reserva de Emergência')
+            print(f'Sua reserva de emergência é de {df['Reserva de Emergência'].item()}')
+            
+            saveXLSX(df)
+        case 6:
+            df['Aporte Mensal'] = (
+                df['Salário']
+                .str.strip()
+                .str.replace('R$', '')
+                .astype(int) * 0.2
+            ).apply(lambda x: f"R$ {x:.0f}")
+
+            df['Viver de Renda'] = (
+                df['Salário']
+                .str.strip()
+                .str.replace('R$', '')
+                .astype(int) * 120
+            ).apply(lambda x: f"R$ {x}")
+
+            clear()
+            title('Viver de Renda')
+            print(f'Para viver de renda você precisa chegar a {df['Viver de Renda'].item()} investidos\nPara isso, você precisa de um aporte mensal de {df['Aporte Mensal'].item()}')
+            saveXLSX(df)
+        case 7:
             break

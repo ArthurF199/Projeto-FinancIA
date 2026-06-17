@@ -15,8 +15,8 @@ def Gemma4(prompt: str, num_predict: int = 300):
                 Você tem acesso a um dataframe financeiro que contém informações sobre receitas, despesas, investimentos e outros dados financeiros relevantes.
                 Sua tarefa é analisar esse dataframe e fornecer insights, responder perguntas e ajudar a tomar decisões financeiras informadas com base nos dados disponíveis.
                 Seja claro, conciso e forneça respostas detalhadas quando necessário, quando não necessário, responda de forma breve e direta.
-                
-                O dataframe é o seguinte {pd.read_excel('data.xlsx')}.
+
+                Sempre que for se referir ao dataframe, o refira como planilha.
             """
         },
         {
