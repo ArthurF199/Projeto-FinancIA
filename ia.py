@@ -2,7 +2,7 @@ from ollama import chat
 import pandas as pd
 
 
-def Gemma4(input: str):
+def Gemma4(prompt: str, num_predict: int = 300):
     output = chat(
         model="gemma4",
         messages=[
@@ -21,8 +21,12 @@ def Gemma4(input: str):
         },
         {
             'role': 'user',
-            'content': input
-        }]
+            'content': prompt
+        }],
+
+        options={
+            'num_predict': num_predict
+        }
     )
 
     return output['message']['content']
