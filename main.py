@@ -37,7 +37,7 @@ def options(options: list):
 
 
 def registerData(df, prompt):
-    title('Adicionar receita')
+    print(('Carregando...'))
     response = ia.Gemma4(f"""
               Hoje: {datetime.now().strftime("%d/%m%Y")}             
             
@@ -55,7 +55,7 @@ def registerData(df, prompt):
                 (caso não for informada, escreva null no campo)
               - Dia de pagamento: somente se for descrito como uma conta, siga o mesmo formato do campo Data(DD-MM-AA)
                 (caso não for informada, escreva null no campo)
-              Siga o seguinte exemplo: {{"Ação": 0 ou 1, "Descrição": "Descrição da receita", "Valor": "R$ 0000.00", "Data": "DD-MM-AAAA", "Tipo": "Entrada ou Saída de dinheiro", "Dia de Pagamento": "DD-MM-AAAA (somente se for necessário)"}}
+              Siga o seguinte exemplo: {{"Ação": 0 ou 1, "Descrição": "Descrição da receita", "Valor": "R$ 0000", "Data": "DD-MM-AAAA", "Tipo": "Entrada ou Saída de dinheiro", "Dia de Pagamento": "DD-MM-AAAA (somente se for necessário)"}}
               Quero que me mande somente a receita, sem nenhuma explicação ou formatação adicional.
                          
               Considere como não informada apenas quando realmente o usuário não descreveu a informação, tente ao máximo extrair as informações que o usuário descrever.
@@ -64,7 +64,7 @@ def registerData(df, prompt):
               Considere os seguintes exemplos de extrações corretas:
               
               Entrada: Recebi meu salário de R$ 3.500,00 hoje.
-              Saída: "Ação": 1, "Descrição": "Salário", "Valor": "R$ 3500.00", "Data": "16-06-2026", "Tipo": "Entrada", "Dia de Pagamento": null
+              Saída: "Ação": 1, "Descrição": "Salário", "Valor": "R$ 3500", "Data": "16-06-2026", "Tipo": "Entrada", "Dia de Pagamento": null
                          
               Entrada: Gastei R$ 120,50 no supermercado ontem.
               Saída: "Ação": 1, "Descrição": "Supermercado", "Valor": "R$ 120.50", "Data": "15-06-2026", "Tipo": "Saída", "Dia de Pagamento": null
@@ -73,26 +73,31 @@ def registerData(df, prompt):
               Saída: "Ação": 1, "Descrição": "Internet", "Valor": "R$ 89.90", "Data": null, "Tipo": "Saída", "Dia de Pagamento": "10-07-2026"
               
               Entrada: Remova o gasto de restaurante de R$ 300,00.
-              Saída: "Ação": 0, "Descrição": "Restaurante", "Valor": "R$ 300.00", "Data": null, "Tipo": "Saída", "Dia de Pagamento": null
+              Saída: "Ação": 0, "Descrição": "Restaurante", "Valor": "R$ 300", "Data": null, "Tipo": "Saída", "Dia de Pagamento": null
               
               Entrada: Recebi um dinheiro de um freela.
-              Saída: "Ação": 1, "Descrição": "Freelance", "Valor": null, "Data": null, "Tipo": "Entrada", "Dia de Pagamento": null
+              Saída: "Ação": 1, "Descrição": "Freelance", "Valor": null, "Data": {datetime.now().strftime("%d/%m%Y")}, "Tipo": "Entrada", "Dia de Pagamento": null
 
+              Entrada: Hoje chegou uma conta de luz no valor de 200 reais para ser paga no dia 20/05/2026.
+              Saída: "Ação": 1, "Descrição": "Conta de luz", "Valor": 200, "Data": {datetime.now().strftime("%d/%m%Y")}, "Tipo": "Saída", "Dia de Pagamento": 20-05-2026
+
+              Entrada: Paguei a conta de luz que foi registrada no dia 15/05/2026 no valor de 200 reais que era para ser paga no dia 20/05/2026.
+              Saída: "Ação": 0, "Descrição": "Conta de luz", "Valor": 200, "Data": 15/05/2026, "Tipo": "Saída", "Dia de Pagamento": 20-05-2026
               A descrição do registro é: {prompt}
     """, 1000)
 
     print(repr(response))
     response = json.loads(response)
-    new_df = df.copy()
+    new_df = df.fillna('').copy()
     n = len(new_df)
     
     match response['Ação']:
         case 0:
-            print(new_df['Descrição'] == response['Descrição'])
-            print(new_df['Valor'] == response['Valor'])
-            print(new_df['Data do registro'] == response['Data'])
-            print(new_df['Tipo'] == response['Tipo'])
-            print(new_df['Dia de Pagamento'] == response['Dia de Pagamento'])
+            print(new_df['Descrição'].str.lower() == response['Descrição'].lower())
+            print(new_df['Valor'].str.lower() == response['Valor'].lower())
+            print(new_df['Data do registro'].str.lower() == response['Data'].lower())
+            print(new_df['Tipo'].str.lower() == response['Tipo'].lower())
+            print(new_df['Dia de Pagamento'].str.lower() == response['Dia de Pagamento'].lower())
             
 
             filtro = (
@@ -128,7 +133,7 @@ while True:
     match options(['Registrar Salário', 'Analisar a planilha', 'Registrar/Remover Dados', 'Visualisar Planilha', 'Reserva de Emergência','Viver de Renda', 'Sair']):
         case 1:
             clear()
-            df['Salário'] = 'R$ ' + input('Qual o seu salário: R$')
+            df.loc[0, 'Salário'] = 'R$ ' + input('Qual o seu salário: R$')
             saveXLSX(df)
         case 2:
             clear()
@@ -143,9 +148,10 @@ while True:
                 print('Erro, tente novamente.')
                 continue
         case 3:
+            clear()
+            title('Registro de dados')
+            print(df.fillna('').to_string(index=False))
             try:
-                clear()
-                title('Registro de dados')
                 temp = registerData(df, input('Descreva o registro: ')) # temp solution
                 unsaved_df = temp[0]
                 action = temp[1]
@@ -167,39 +173,39 @@ while True:
         case 4:
             clear()
             title('Visualição da Planilha')
-            print(df.to_string(index=False))
+            print(df.fillna('').to_string(index=False))
         case 5:
             clear()
-            df['Reserva de Emergência'] = (
-                df['Salário']
-                .str.strip()
-                .str.replace('R$', '')
-                .astype(int) * 6
-            ).apply(lambda x: f"R$ {x}")
+            df.loc[0, 'Reserva de Emergência'] = (
+                f" R$ {int(df.loc[0, 'Salário']
+                .strip()
+                .replace('R$', '')
+                ) * 6}"
+            )
 
             clear()
             title('Reserva de Emergência')
-            print(f'Sua reserva de emergência é de {df['Reserva de Emergência'].item()}')
+            print(f'Sua reserva de emergência é de {df.loc[0, 'Reserva de Emergência']}')
             
             saveXLSX(df)
         case 6:
-            df['Aporte Mensal'] = (
-                df['Salário']
-                .str.strip()
-                .str.replace('R$', '')
-                .astype(int) * 0.2
-            ).apply(lambda x: f"R$ {x:.0f}")
+            df.loc[0, 'Aporte Mensal'] = (
+                f"R$ {int(df.loc[0, 'Salário']
+                .strip()
+                .replace('R$', '')
+                ) * 0.2:.0f}"
+            )
 
-            df['Viver de Renda'] = (
-                df['Salário']
-                .str.strip()
-                .str.replace('R$', '')
-                .astype(int) * 120
-            ).apply(lambda x: f"R$ {x}")
+            df.loc[0, 'Viver de Renda'] = (
+                f"R$ {int(df.loc[0, 'Salário']
+                .strip()
+                .replace('R$', '')
+                ) * 120}"
+            )
 
             clear()
             title('Viver de Renda')
-            print(f'Para viver de renda você precisa chegar a {df['Viver de Renda'].item()} investidos\nPara isso, você precisa de um aporte mensal de {df['Aporte Mensal'].item()}')
+            print(f'Para viver de renda você precisa chegar a {df.loc[0, 'Viver de Renda']} investidos\nPara isso, você precisa de um aporte mensal de {df.loc[0, 'Aporte Mensal']}')
             saveXLSX(df)
         case 7:
             break
