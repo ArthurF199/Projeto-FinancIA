@@ -133,6 +133,7 @@ while True:
     match options(['Registrar Salário', 'Analisar a planilha', 'Registrar/Remover Dados', 'Visualisar Planilha', 'Reserva de Emergência','Viver de Renda', 'Sair']):
         case 1:
             clear()
+            df['Salário'] = df['Salário'].astype(str)
             df.loc[0, 'Salário'] = 'R$ ' + input('Qual o seu salário: R$')
             saveXLSX(df)
         case 2:
@@ -176,6 +177,7 @@ while True:
             print(df.fillna('').to_string(index=False))
         case 5:
             clear()
+            df.loc['Reserva de Emergência'] = df.loc[0, 'Reserva de Emergência'].astype(str)
             df.loc[0, 'Reserva de Emergência'] = (
                 f" R$ {int(df.loc[0, 'Salário']
                 .strip()
@@ -189,6 +191,7 @@ while True:
             
             saveXLSX(df)
         case 6:
+            df.loc['Aporte Mensal'] = df.loc[0, 'Aporte Mensal'].astype(str)
             df.loc[0, 'Aporte Mensal'] = (
                 f"R$ {int(df.loc[0, 'Salário']
                 .strip()
