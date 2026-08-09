@@ -26,7 +26,9 @@ def Gemma4(prompt: str, num_predict: int = 300):
 
         options={
             'num_predict': num_predict
-        }
+        },
+
+        think=False
     )
 
     return output['message']['content']

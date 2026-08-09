@@ -2,8 +2,13 @@ import pandas as pd
 import ia
 import json
 import os
-import time
+from time import sleep
 from datetime import datetime
+import flet as ft
+
+
+def teste():
+    return 'fodase'
 
 
 def saveXLSX(df):
@@ -127,88 +132,97 @@ def registerData(df, prompt):
 
 
 clear()
-while True:
-    df = pd.read_excel('data.xlsx')
-    title('FinancIA: Gestor Financeiro')
-    match options(['Registrar Salário', 'Analisar a planilha', 'Registrar/Remover Dados', 'Visualisar Planilha', 'Reserva de Emergência','Viver de Renda', 'Sair']):
-        case 1:
-            clear()
-            df['Salário'] = df['Salário'].astype(str)
-            df.loc[0, 'Salário'] = 'R$ ' + input('Qual o seu salário: R$')
-            saveXLSX(df)
-        case 2:
-            clear()
-            title('Análise da planilha')
-            print('Carregando...')
-            response = ia.Gemma4(f'Analise o dataframe: {df} e me se eu estou fazendo um bom gerenciamento do meu dinheiro e me dê sugestões do que eu deveria fazer, responda de forma direta, sem criar tópicos ou textos muito grandes.', 1000)
-            clear()
-            title('Análise da planilha')
-            if response is not None or not '':
-                print(response)
-            else:
-                print('Erro, tente novamente.')
-                continue
-        case 3:
-            clear()
-            title('Registro de dados')
-            print(df.fillna('').to_string(index=False))
-            try:
-                temp = registerData(df, input('Descreva o registro: ')) # temp solution
-                unsaved_df = temp[0]
-                action = temp[1]
-                del temp
+# while True:
+#     ft.app(target=app.main)
+#     df = pd.read_excel('data.xlsx')
+#     title('FinancIA: Gestor Financeiro')
+#     print(df.fillna('').to_string(index=False))
+#     sleep(.5)
+#     match options(['Registrar Salário', 'Analisar a planilha', 'Registrar/Remover Dados', 'Reserva de Emergência', 'Viver de Renda', 'Sair']):
+#         case 1:
+#             clear()
+#             df['Salário'] = df['Salário'].astype(str)
+#             df.loc[0, 'Salário'] = 'R$ ' + input('Qual o seu salário: R$')
+#             saveXLSX(df)
+#         case 2:
+#             clear()
+#             title('Análise da planilha')
+#             sleep(.5)
+#             print('Carregando...')
+#             response = ia.Gemma4(f'Analise o dataframe: {df} e me diga se eu estou fazendo um bom gerenciamento do meu dinheiro e me dê sugestões do que eu deveria fazer, responda de forma direta, sem criar tópicos ou textos muito grandes.', 1000)
+#             clear()
+#             title('Análise da planilha')
+#             if response is not None or not '':
+#                 print(response)
+#                 sleep(.5)
+#                 input('Pressione ENTER para continuar.')
+#             else:
+#                 print('Erro, tente novamente.')
+#                 sleep(.5)
+#                 input('Pressione ENTER para continuar.')
+#                 continue
+#         case 3:
+#             clear()
+#             title('Registro de dados')
+#             sleep(.5)
+#             print(df.fillna('').to_string(index=False))
+#             try:
+#                 temp = registerData(df, input('Descreva o registro: ')) # temp solution
+#                 unsaved_df = temp[0]
+#                 action = temp[1]
+#                 del temp
 
-                match action:
-                    case 0:
-                        print('Receita removida com sucesso!') 
-                    case 1:
-                        print('Receita adicionada com sucesso!') 
-                saveXLSX(unsaved_df) # Unsaved DataFrame
-                df = unsaved_df # Saved Dataframe
+#                 match action:
+#                     case 0:
+#                         print('Receita removida com sucesso!') 
+#                     case 1:
+#                         print('Receita adicionada com sucesso!') 
+#                 saveXLSX(unsaved_df) # Unsaved DataFrame
+#                 df = unsaved_df # Saved Dataframe
 
-            except PermissionError as e:
-                print(f'Erro de permissão. Sua planilha está aberta, feche-a para que possa ser modificada. [{e}]')
-                print(df)
-            except Exception as e:
-                print(f'Ocorreu um erro ao adicionar a receita: {e}')
-        case 4:
-            clear()
-            title('Visualição da Planilha')
-            print(df.fillna('').to_string(index=False))
-        case 5:
-            clear()
-            df.loc['Reserva de Emergência'] = df.loc[0, 'Reserva de Emergência'].astype(str)
-            df.loc[0, 'Reserva de Emergência'] = (
-                f" R$ {int(df.loc[0, 'Salário']
-                .strip()
-                .replace('R$', '')
-                ) * 6}"
-            )
+#             except PermissionError as e:
+#                 print(f'Erro de permissão. Sua planilha está aberta, feche-a para que possa ser modificada. [{e}]')
+#                 input('Pressione ENTER para continuar.')
+#             except Exception as e:
+#                 print(f'Ocorreu um erro ao adicionar a receita: {e}')
+#                 input('Pressione ENTER para continuar.')
+#         case 4:
+#             clear()
+#             df.loc['Reserva de Emergência'] = df.loc[0, 'Reserva de Emergência'].astype(str) # bug aqui
+#             df.loc[0, 'Reserva de Emergência'] = (
+#                 f" R$ {int(df.loc[0, 'Salário']
+#                 .strip()
+#                 .replace('R$', '')
+#                 ) * 6}"
+#             )
 
-            clear()
-            title('Reserva de Emergência')
-            print(f'Sua reserva de emergência é de {df.loc[0, 'Reserva de Emergência']}')
-            
-            saveXLSX(df)
-        case 6:
-            df.loc['Aporte Mensal'] = df.loc[0, 'Aporte Mensal'].astype(str)
-            df.loc[0, 'Aporte Mensal'] = (
-                f"R$ {int(df.loc[0, 'Salário']
-                .strip()
-                .replace('R$', '')
-                ) * 0.2:.0f}"
-            )
+#             clear()
+#             title('Reserva de Emergência')
+#             sleep(.5)
+#             print(f'Sua reserva de emergência é de {df.loc[0, 'Reserva de Emergência']}')
+#             sleep(.5)
+#             saveXLSX(df)
+#         case 5:
+#             df.loc['Aporte Mensal'] = df.loc[0, 'Aporte Mensal'].astype(str) # possivel bug aqui
+#             df.loc[0, 'Aporte Mensal'] = (
+#                 f"R$ {int(df.loc[0, 'Salário']
+#                 .strip()
+#                 .replace('R$', '')
+#                 ) * 0.2:.0f}"
+#             )
 
-            df.loc[0, 'Viver de Renda'] = (
-                f"R$ {int(df.loc[0, 'Salário']
-                .strip()
-                .replace('R$', '')
-                ) * 120}"
-            )
+#             df.loc[0, 'Viver de Renda'] = (
+#                 f"R$ {int(df.loc[0, 'Salário']
+#                 .strip()
+#                 .replace('R$', '')
+#                 ) * 120}"
+#             )
 
-            clear()
-            title('Viver de Renda')
-            print(f'Para viver de renda você precisa chegar a {df.loc[0, 'Viver de Renda']} investidos\nPara isso, você precisa de um aporte mensal de {df.loc[0, 'Aporte Mensal']}')
-            saveXLSX(df)
-        case 7:
-            break
+#             clear()
+#             title('Viver de Renda')
+#             sleep(.5)
+#             print(f'Para viver de renda você precisa chegar a {df.loc[0, 'Viver de Renda']} investidos\nPara isso, você precisa de um aporte mensal de {df.loc[0, 'Aporte Mensal']}')
+#             sleep(.5)
+#             saveXLSX(df)
+#         case 6:
+#             break
