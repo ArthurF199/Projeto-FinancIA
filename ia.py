@@ -2,7 +2,7 @@ from ollama import chat
 import pandas as pd
 
 
-def Gemma4(prompt: str, num_predict: int = 300):
+def Gemma4(prompt: str, num_predict: int = 300, stream: bool = False):
     output = chat(
         model="gemma4",
         messages=[
@@ -28,7 +28,14 @@ def Gemma4(prompt: str, num_predict: int = 300):
             'num_predict': num_predict
         },
 
-        think=False
+        think=False,
+        stream=stream
     )
 
-    return output['message']['content']
+    if stream:
+        def gerador():
+            for token in output:
+               yield token['message']['content']   
+        return gerador()
+    else:
+        return output['message']['content'] 

@@ -55,7 +55,7 @@ def registerData(df, prompt):
               - Valor: o valor da receita, seguindo o formato R$ 000.00.
                 (caso não seja informada, escreva null no campo)
               - Data: a data do registro, seguindo o formato DD-MM-AAAA
-                (caso a data não for informada, considere como hoje)         
+                (caso a data não for informada, considere a de hoje({datetime.now().strftime("%d/%m%Y")}))         
               - Tipo: se é entrada ou saída ou conta.
                 (caso não for informada, escreva null no campo)
               - Dia de pagamento: somente se for descrito como uma conta, siga o mesmo formato do campo Data(DD-MM-AA)
@@ -89,7 +89,7 @@ def registerData(df, prompt):
               Entrada: Paguei a conta de luz que foi registrada no dia 15/05/2026 no valor de 200 reais que era para ser paga no dia 20/05/2026.
               Saída: "Ação": 0, "Descrição": "Conta de luz", "Valor": 200, "Data": 15/05/2026, "Tipo": "Saída", "Dia de Pagamento": 20-05-2026
               A descrição do registro é: {prompt}
-    """, 1000)
+    """, 1000, stream=False)
 
     print(repr(response))
     response = json.loads(response)

@@ -26,9 +26,21 @@
 import flet as ft
 import pandas as pd
 from ia import *
+from main import registerData
+from time import sleep
 
 
 def Main(page: ft.Page):
+    page.theme = ft.Theme(
+        text_theme=ft.TextTheme(
+            body_medium=ft.TextStyle(size=18),   # Tamanho padrão do texto comum
+            body_large=ft.TextStyle(size=20),    # Texto ligeiramente maior
+            title_medium=ft.TextStyle(size=24), # Títulos de tabelas/cards
+            title_large=ft.TextStyle(size=30)   # Títulos de páginas
+        )
+    )
+
+
     # Configurações da página
     page.title = "Dashboard Flet"
     page.padding = 20
@@ -38,12 +50,29 @@ def Main(page: ft.Page):
     # ==========================================
     # 1. COLUNA ESQUERDA (Botões)
     # ==========================================
+    def processsar_relatorio(e):
+        prompt = f"""Analise o dataframe: {df}.
+        Esse dataframe apenas indica meus gastos, considere que eu não tenho controle sobre o dataframe, eu não consigo adicionar ou alterar as categorias, eu apenas dito os meus gastos.
+        Me diga se estou fazendo um bom gerenciamento do meu dinheiro e me dê sugestões do que eu deveria fazer em relação ao meu financeiro.
+        Lembre-se de responder de forma curta e resumida.
+        """
+        mensagem_ia = ft.Text("Sistema: Analisando dados...", color=ft.Colors.GREEN)
+        lista_mensagens.controls.append(mensagem_ia)
+        page.update()
+        
+        resposta = Gemma4(prompt)
+        mensagem_ia.value = f"Sistema: {resposta}"
+        page.update()
+        # for token in resposta:
+        #     mensagem_ia.value += token
+        #     page.update()
+
     coluna_botoes = ft.Container(
         content=ft.Column(
             controls=[
                 ft.Text("Menu", size=20, weight="bold"),
                 ft.ElevatedButton("Dashboard", icon=ft.Icons.DASHBOARD, width=200),
-                ft.ElevatedButton("Relatórios", icon=ft.Icons.PIE_CHART, width=200),
+                ft.ElevatedButton("Relatório", icon=ft.Icons.PIE_CHART, width=200, on_click=processsar_relatorio),
                 ft.ElevatedButton("Configurações", icon=ft.Icons.SETTINGS, width=200),
             ],
             spacing=15 # Espaço entre os botões
@@ -120,11 +149,9 @@ def Main(page: ft.Page):
             page.update()
 
             try:
-                from main import registerData
-
                 nonlocal df
                 novo_df, acao = registerData(df, mensagem_usuario)
-                df = novo_df
+                df = novo_df.fillna('')
                 df.to_excel("data.xlsx", index=False)
                 recarregar_tabela()
 
