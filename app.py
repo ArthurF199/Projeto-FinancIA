@@ -132,12 +132,13 @@ def Main(page: ft.Page):
     coluna_botoes = ft.Container(
         content=ft.Column(
             controls=[
-                ft.Button('debug', on_click=lambda e: full_screen()),
+                ft.Row(
+                    ft.Button('', icon=ft.Icons.FULLSCREEN, on_click=lambda e: full_screen())),
                 ft.Text("Menu", size=fonte+20, weight="bold"),
-                ft.ElevatedButton(ft.Text("Salário", size=fonte+20), icon=ft.Icons.DASHBOARD, width=200, on_click=mostrar_campo_insercao),
-                ft.ElevatedButton("Analisar Planilha", icon=ft.Icons.PIE_CHART, width=200, on_click=analise),
-                ft.ElevatedButton("Reserva de Emergência", icon=ft.Icons.SETTINGS, width=200, on_click=reserva_emergência),
-                ft.ElevatedButton("Viver de Renda", icon=ft.Icons.SETTINGS, width=200, on_click=viver_renda),
+                ft.ElevatedButton(ft.Text("Salário", size=fonte+5), icon=ft.Icons.DASHBOARD, width=200, on_click=mostrar_campo_insercao),
+                ft.ElevatedButton(ft.Text("Analisar Planilha", size=fonte+5), icon=ft.Icons.PIE_CHART, width=200, on_click=analise),
+                ft.ElevatedButton(ft.Text("Reserva de Emergência", size=fonte+5), icon=ft.Icons.SETTINGS, width=200, on_click=reserva_emergência),
+                ft.ElevatedButton(ft.Text("Viver de Renda", size=fonte+5), icon=ft.Icons.SETTINGS, width=200, on_click=viver_renda),
             ],
             spacing=15 # Espaço entre os botões
         ),
@@ -153,17 +154,19 @@ def Main(page: ft.Page):
 
     df = pd.read_excel('data.xlsx')
     df = pd.DataFrame(df).fillna('')  # Preenche valores nulos com string vazia
+
+    tabela_financeira = ft.DataTable(columns=[], rows=[])
     
     planilha = ft.Container(
         content=ft.Column(
             controls=[
-                ft.Text("Planilha Financeira", size=20, weight="bold"),
+                ft.Text("Planilha Financeira", size=fonte+5, weight="bold"),
 
                 area_novo_dado,
 
-                ft.DataTable(
-                    columns=[],
-                    rows=[]
+                ft.Row(
+                    controls=[tabela_financeira],
+                    scroll=ft.ScrollMode.ADAPTIVE
                 )
             ],
             scroll=ft.ScrollMode.ADAPTIVE,
@@ -174,7 +177,7 @@ def Main(page: ft.Page):
     )
     
     def recarregar_tabela():
-        tabela = planilha.content.controls[2]
+        tabela = tabela_financeira
         tabela.columns.clear()
         tabela.rows.clear()
         
@@ -201,7 +204,7 @@ def Main(page: ft.Page):
     def enviar_mensagem(e):
         if campo_mensagem.value != "":
             # Adiciona o texto na lista de mensagens
-            lista_mensagens.controls.append(ft.Text(f"Você: {campo_mensagem.value}"))
+            lista_mensagens.controls.append(ft.Text(f"Você: {campo_mensagem.value}", size=fonte+5))
             mensagem_usuario = campo_mensagem.value
             # Limpa o campo
             campo_mensagem.value = ""
@@ -219,9 +222,9 @@ def Main(page: ft.Page):
                 else:
                     resposta = "Registro adicionado com sucesso."
 
-                lista_mensagens.controls.append(ft.Text(f"FinancIA: {resposta}", color=ft.Colors.GREEN))
+                lista_mensagens.controls.append(ft.Text(f"FinancIA: {resposta}", size=fonte+5, color=ft.Colors.GREEN))
             except Exception as exc:
-                lista_mensagens.controls.append(ft.Text(f"FinancIA: Erro ao processar: {exc}", color=ft.Colors.RED))
+                lista_mensagens.controls.append(ft.Text(f"FinancIA: Erro ao processar: {exc}", size=fonte+5, color=ft.Colors.RED))
 
             page.update()
             return campo_mensagem.value
@@ -236,7 +239,7 @@ def Main(page: ft.Page):
     coluna_chat = ft.Container(
         content=ft.Column(
             controls=[
-                ft.Text("FinancIA", size=20, weight="bold"),
+                ft.Text("FinancIA", size=fonte+5, weight="bold"),
                 lista_mensagens, # Ocupa o meio do chat
                 ft.Row([campo_mensagem, botao_enviar]) # Fica na base do chat
             ]
