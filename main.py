@@ -43,55 +43,51 @@ def options(options: list):
 
 def registerData(df, prompt):
     print(('Carregando...'))
-    response = ia.Gemma4(f"""
-              Hoje: {datetime.now().strftime("%d/%m%Y")}             
-            
-              Vou te enviar uma descrição de um registro.
-              Quero que você determine se o usuário quer adicionar ou remover uma receita e me retorne um JSON com os seguintes campos:
-              - Ação: Adicionar/remover o registro, deixe 0 para remover e 1 para adicionar um dado à planilha
-                (caso o usuário não deixe claro se ele deseja adicionar ou remover, considere deixar em 1)
-              - Descrição: uma breve descrição da receita
-                (caso não seja informada, escreva null no campo)
-              - Valor: o valor da receita, seguindo o formato R$ 000.00.
-                (caso não seja informada, escreva null no campo)
-              - Data: a data do registro, seguindo o formato DD-MM-AAAA
-                (caso a data não for informada, considere a de hoje({datetime.now().strftime("%d/%m%Y")}))         
-              - Tipo: se é entrada ou saída ou conta.
-                (caso não for informada, escreva null no campo)
-              - Dia de pagamento: somente se for descrito como uma conta, siga o mesmo formato do campo Data(DD-MM-AA)
-                (caso não for informada, escreva null no campo)
-              Siga o seguinte exemplo: {{"Ação": 0 ou 1, "Descrição": "Descrição da receita", "Valor": "R$ 0000", "Data": "DD-MM-AAAA", "Tipo": "Entrada ou Saída de dinheiro", "Dia de Pagamento": "DD-MM-AAAA (somente se for necessário)"}}
-              Quero que me mande somente a receita, sem nenhuma explicação ou formatação adicional.
-                         
-              Considere como não informada apenas quando realmente o usuário não descreveu a informação, tente ao máximo extrair as informações que o usuário descrever.
-              Considere como ação remover quando o usuário diz algo como: "quero remover tal conta de tal dia com tal descrição"
-              
-              Considere os seguintes exemplos de extrações corretas:
-              
-              Entrada: Recebi meu salário de R$ 3.500,00 hoje.
-              Saída: "Ação": 1, "Descrição": "Salário", "Valor": "R$ 3500", "Data": "16-06-2026", "Tipo": "Entrada", "Dia de Pagamento": null
-                         
-              Entrada: Gastei R$ 120,50 no supermercado ontem.
-              Saída: "Ação": 1, "Descrição": "Supermercado", "Valor": "R$ 120.50", "Data": "15-06-2026", "Tipo": "Saída", "Dia de Pagamento": null
-               
-              Entrada: Todo dia 10 pago R$ 89,90 da internet.
-              Saída: "Ação": 1, "Descrição": "Internet", "Valor": "R$ 89.90", "Data": null, "Tipo": "Saída", "Dia de Pagamento": "10-07-2026"
-              
-              Entrada: Remova o gasto de restaurante de R$ 300,00.
-              Saída: "Ação": 0, "Descrição": "Restaurante", "Valor": "R$ 300", "Data": null, "Tipo": "Saída", "Dia de Pagamento": null
-              
-              Entrada: Recebi um dinheiro de um freela.
-              Saída: "Ação": 1, "Descrição": "Freelance", "Valor": null, "Data": {datetime.now().strftime("%d/%m%Y")}, "Tipo": "Entrada", "Dia de Pagamento": null
+    response = ia.Gemma4(f"""            
+Você é um assistente especialista em extração de dados financeiros.
+Sua tarefa é analisar a mensagem do usuário e extrair os dados para um objeto JSON estrito.
+NÃO retorne nenhuma palavra adicional, explicações ou blocos de código markdown. Retorne APENAS o JSON puro.
 
-              Entrada: Hoje chegou uma conta de luz no valor de 200 reais para ser paga no dia 20/05/2026.
-              Saída: "Ação": 1, "Descrição": "Conta de luz", "Valor": 200, "Data": {datetime.now().strftime("%d/%m%Y")}, "Tipo": "Saída", "Dia de Pagamento": 20-05-2026
+Hoje é: {datetime.now().strftime("%d/%m/%Y")}
 
-              Entrada: Paguei a conta de luz que foi registrada no dia 15/05/2026 no valor de 200 reais que era para ser paga no dia 20/05/2026.
-              Saída: "Ação": 0, "Descrição": "Conta de luz", "Valor": 200, "Data": 15/05/2026, "Tipo": "Saída", "Dia de Pagamento": 20-05-2026
+=== DADOS ATUAIS DA PLANILHA ===
+Aqui estão os registros recentes do usuário:
+{df.tail(50).fillna('').to_string(index=False)}
+=================================
 
-              Entrada: Paguei a conta de 500 reais que era para ser paga no dia 11 do 8 de 2026
-              Saída: "Ação": 0, "Descrição": "Conta a pagar", "Valor": 500, "Data": {datetime.now().strftime("%d/%m%Y")}, "Tipo": "Saída", "Dia de Pagamento": 11-08-2026
-              A descrição do registro é: {prompt}
+Regras para os campos do JSON:
+- "Ação": Inteiro. 1 para adicionar, 0 para remover.
+- "Descrição": String curta resumindo o gasto/receita.
+- "Valor": Número (float/int) usando ponto para decimais. Ex: 150.50.
+- "Data": String no formato "DD/MM/AAAA". Se não informada, use a de hoje ({datetime.now().strftime("%d/%m/%Y")}).
+- "Tipo": String categórica ("Entrada", "Saída" ou "Conta").
+- "Dia de Pagamento": String "DD/MM/AAAA". Usado APENAS se for uma conta para o futuro.
+
+IMPORTANTE PARA REMOÇÕES (Ação 0): 
+Se o usuário pedir para remover um registro, olhe nos "DADOS ATUAIS DA PLANILHA" acima, identifique de qual registro ele está falando e copie os dados EXATOS (Descrição, Valor, Data e Tipo) para preencher o JSON.
+
+Exemplos de extrações perfeitas:
+
+Entrada: Recebi meu salário de R$ 3.500,00 hoje.
+Saída: {{"Ação": 1, "Descrição": "Salário", "Valor": 3500.00, "Data": "{datetime.now().strftime("%d/%m/%Y")}", "Tipo": "Entrada", "Dia de Pagamento": null}}
+
+Entrada: Gastei R$ 120,50 no supermercado ontem.
+Saída: {{"Ação": 1, "Descrição": "Supermercado", "Valor": 120.50, "Data": "09/08/2026", "Tipo": "Saída", "Dia de Pagamento": null}}
+
+Entrada: Todo dia 10 pago R$ 89,90 da internet.
+Saída: {{"Ação": 1, "Descrição": "Internet", "Valor": 89.90, "Data": "{datetime.now().strftime("%d/%m/%Y")}", "Tipo": "Saída", "Dia de Pagamento": "10/08/2026"}}
+
+Entrada: Remova o gasto de restaurante de R$ 300,00.
+Saída: {{"Ação": 0, "Descrição": "Restaurante", "Valor": 300.00, "Data": "{datetime.now().strftime("%d/%m/%Y")}", "Tipo": "Saída", "Dia de Pagamento": null}}
+
+Entrada: Hoje chegou uma conta de luz no valor de 200 reais para ser paga no dia 20/05/2026.
+Saída: {{"Ação": 1, "Descrição": "Conta de luz", "Valor": 200.00, "Data": "{datetime.now().strftime("%d/%m/%Y")}", "Tipo": "Conta", "Dia de Pagamento": "20/05/2026"}}
+
+Entrada: Paguei a conta de luz que foi registrada no dia 15/05/2026 no valor de 200 reais que era para ser paga no dia 20/05/2026.
+Saída: {{"Ação": 0, "Descrição": "Conta de luz", "Valor": 200.00, "Data": "15/05/2026", "Tipo": "Conta", "Dia de Pagamento": "20/05/2026"}}
+
+Agora processe a seguinte entrada do usuário:
+Entrada: {prompt}
     """, 1000, stream=False)
 
     print(repr(response))
@@ -102,7 +98,7 @@ def registerData(df, prompt):
     match response['Ação']:
         case 0:
             desc_resp = (response['Descrição'] or '').lower()
-            val_resp = (response['Valor'] or '').lower()
+            val_resp = (str(response['Valor']) or '').lower()
             data_resp = (response['Data'] or '').lower()
             tipo_resp = (response['Tipo'] or '').lower()
             pag_resp = (response['Dia de Pagamento'] or '').lower()
