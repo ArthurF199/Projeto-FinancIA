@@ -5,8 +5,16 @@ from main import registerData
 
 
 def Main(page: ft.Page):
+    fullscreen = False
+    def full_screen():
+        nonlocal fullscreen
+        if fullscreen == False:
+            fullscreen = True
+        else:
+            fullscreen = False
+        page.window.full_screen = fullscreen
     fonte = 15
-    page.window.full_screen = True
+    page.window.full_screen = False
     page.theme = ft.Theme(
         text_theme=ft.TextTheme(
             body_medium=ft.TextStyle(size=fonte),   # Tamanho padrão do texto comum
@@ -124,8 +132,9 @@ def Main(page: ft.Page):
     coluna_botoes = ft.Container(
         content=ft.Column(
             controls=[
-                ft.Text("Menu", size=20, weight="bold"),
-                ft.ElevatedButton("Salário", icon=ft.Icons.DASHBOARD, width=200, on_click=mostrar_campo_insercao),
+                ft.Button('debug', on_click=lambda e: full_screen()),
+                ft.Text("Menu", size=fonte+20, weight="bold"),
+                ft.ElevatedButton(ft.Text("Salário", size=fonte+20), icon=ft.Icons.DASHBOARD, width=200, on_click=mostrar_campo_insercao),
                 ft.ElevatedButton("Analisar Planilha", icon=ft.Icons.PIE_CHART, width=200, on_click=analise),
                 ft.ElevatedButton("Reserva de Emergência", icon=ft.Icons.SETTINGS, width=200, on_click=reserva_emergência),
                 ft.ElevatedButton("Viver de Renda", icon=ft.Icons.SETTINGS, width=200, on_click=viver_renda),
