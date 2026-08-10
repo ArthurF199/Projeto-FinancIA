@@ -1,45 +1,99 @@
-# import flet as ft
-
-
-# def main(page: ft.Page):
-#     botoes = ft.Column(
-#         controls = [
-#             ft.Button(content="Registrar Salário"),
-#             ft.Button(content="Analisar a planilha"),
-#             ft.Button(content="Registrar/Remover Dados"),
-#             ft.Button(content="Reserva de Emergência"),
-#             ft.Button(content="Viver de Renda")
-#         ],
-#         alignment=ft.MainAxisAlignment.END,
-#         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-
-#     )
-
-#     page.add(
-#         botoes
-#     )
-
-
-# ft.app(target=main)
-
-
 import flet as ft
 import pandas as pd
 from ia import *
 from main import registerData
-from time import sleep
 
 
 def Main(page: ft.Page):
+    fonte = 15
+    page.window.full_screen = True
     page.theme = ft.Theme(
         text_theme=ft.TextTheme(
-            body_medium=ft.TextStyle(size=18),   # Tamanho padrão do texto comum
-            body_large=ft.TextStyle(size=20),    # Texto ligeiramente maior
-            title_medium=ft.TextStyle(size=24), # Títulos de tabelas/cards
-            title_large=ft.TextStyle(size=30)   # Títulos de páginas
+            body_medium=ft.TextStyle(size=fonte),   # Tamanho padrão do texto comum
+            body_large=ft.TextStyle(size=fonte+fonte*.3),    # Texto ligeiramente maior
+            title_medium=ft.TextStyle(size=fonte+fonte*.6), # Títulos de tabelas/cards
+            title_large=ft.TextStyle(size=fonte+fonte*2)   # Títulos de páginas
         )
     )
 
+
+    # ==========================================
+    # LÓGICA DE INSERÇÃO MANUAL DE DADOS
+    # ==========================================
+    # 1. Container que vai guardar o campo de texto (começa vazio)
+    area_novo_dado = ft.Container() 
+
+    # 2. Criamos os componentes de input
+    campo_input = ft.TextField(label="Digite o seu salário", expand=True)
+    
+    def salvar_dado_manual(e):
+        nonlocal df # Garante que estamos mexendo no df principal
+        
+        valor = campo_input.value
+        if valor != "":
+            df.loc[0, 'Salário'] = valor
+
+            # Opcional: Salva no Excel para não perder
+            df = df.fillna('')
+            df.to_excel("data.xlsx", index=False)
+            
+            # Recarrega a tabela visual
+            recarregar_tabela()
+            
+            # Limpa o campo e esconde a área de input
+            campo_input.value = ""
+            area_novo_dado.content = None 
+            page.update()
+
+    botao_salvar = ft.IconButton(icon=ft.Icons.CHECK, icon_color=ft.Colors.GREEN, on_click=salvar_dado_manual)
+    botao_cancelar = ft.IconButton(icon=ft.Icons.CANCEL, icon_color=ft.Colors.RED, on_click=lambda e: fechar_campo())
+
+    def fechar_campo():
+        area_novo_dado.content = None
+        page.update()
+
+    # 3. Função que o botão principal chama para mostrar o campo na tela
+    def mostrar_campo_insercao(e):
+        # Coloca o TextField e os botões dentro da área que estava vazia
+        area_novo_dado.content = ft.Row(
+            controls=[
+                campo_input,
+                botao_salvar,
+                botao_cancelar
+            ]
+        )
+        page.update()
+        campo_input.focus() # Já coloca o cursor piscando no campo
+
+    def reserva_emergência(e):
+        nonlocal df
+        salario = df.loc[0, 'Salário']
+        if salario != '':
+            df.loc[0, 'Reserva de Emergência'] = str(int(salario) * 6)
+            df.fillna('')
+            df.to_excel('data.xlsx')
+
+            recarregar_tabela()
+
+            page.update()
+        else:
+            mostrar_campo_insercao
+
+
+    def viver_renda(e):
+        nonlocal df
+        salario = df.loc[0, 'Salário']
+        if salario != '':
+            df.loc[0, 'Viver de Renda'] = f"{int(salario) * 120}"
+            df.loc[0, 'Aporte Mensal'] = f"{int(salario) * 0.2:.0f}"
+            df.fillna('')
+            df.to_excel('data.xlsx')
+
+            recarregar_tabela()
+
+            page.update()
+        else:
+            mostrar_campo_insercao
 
     # Configurações da página
     page.title = "Dashboard Flet"
@@ -50,7 +104,7 @@ def Main(page: ft.Page):
     # ==========================================
     # 1. COLUNA ESQUERDA (Botões)
     # ==========================================
-    def processsar_relatorio(e):
+    def analise(e):
         prompt = f"""Analise o dataframe: {df}.
         Esse dataframe apenas indica meus gastos, considere que eu não tenho controle sobre o dataframe, eu não consigo adicionar ou alterar as categorias, eu apenas dito os meus gastos.
         Me diga se estou fazendo um bom gerenciamento do meu dinheiro e me dê sugestões do que eu deveria fazer em relação ao meu financeiro.
@@ -71,9 +125,10 @@ def Main(page: ft.Page):
         content=ft.Column(
             controls=[
                 ft.Text("Menu", size=20, weight="bold"),
-                ft.ElevatedButton("Dashboard", icon=ft.Icons.DASHBOARD, width=200),
-                ft.ElevatedButton("Relatório", icon=ft.Icons.PIE_CHART, width=200, on_click=processsar_relatorio),
-                ft.ElevatedButton("Configurações", icon=ft.Icons.SETTINGS, width=200),
+                ft.ElevatedButton("Salário", icon=ft.Icons.DASHBOARD, width=200, on_click=mostrar_campo_insercao),
+                ft.ElevatedButton("Analisar Planilha", icon=ft.Icons.PIE_CHART, width=200, on_click=analise),
+                ft.ElevatedButton("Reserva de Emergência", icon=ft.Icons.SETTINGS, width=200, on_click=reserva_emergência),
+                ft.ElevatedButton("Viver de Renda", icon=ft.Icons.SETTINGS, width=200, on_click=viver_renda),
             ],
             spacing=15 # Espaço entre os botões
         ),
@@ -94,6 +149,9 @@ def Main(page: ft.Page):
         content=ft.Column(
             controls=[
                 ft.Text("Planilha Financeira", size=20, weight="bold"),
+
+                area_novo_dado,
+
                 ft.DataTable(
                     columns=[],
                     rows=[]
@@ -107,7 +165,7 @@ def Main(page: ft.Page):
     )
     
     def recarregar_tabela():
-        tabela = planilha.content.controls[1]
+        tabela = planilha.content.controls[2]
         tabela.columns.clear()
         tabela.rows.clear()
         
@@ -120,14 +178,6 @@ def Main(page: ft.Page):
                 linhas.append(ft.DataCell(ft.Text(str(valor))))
             tabela.rows.append(ft.DataRow(cells=linhas))
 
-    
-    def modificar_dados(e):
-        n = len(df)
-        df.drop("Descrição", axis=1, inplace=True)
-        
-        
-        recarregar_tabela()
-        page.update()
 
     recarregar_tabela()
     # ==========================================

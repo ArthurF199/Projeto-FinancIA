@@ -88,6 +88,9 @@ def registerData(df, prompt):
 
               Entrada: Paguei a conta de luz que foi registrada no dia 15/05/2026 no valor de 200 reais que era para ser paga no dia 20/05/2026.
               Saída: "Ação": 0, "Descrição": "Conta de luz", "Valor": 200, "Data": 15/05/2026, "Tipo": "Saída", "Dia de Pagamento": 20-05-2026
+
+              Entrada: Paguei a conta de 500 reais que era para ser paga no dia 11 do 8 de 2026
+              Saída: "Ação": 0, "Descrição": "Conta a pagar", "Valor": 500, "Data": {datetime.now().strftime("%d/%m%Y")}, "Tipo": "Saída", "Dia de Pagamento": 11-08-2026
               A descrição do registro é: {prompt}
     """, 1000, stream=False)
 
@@ -98,30 +101,23 @@ def registerData(df, prompt):
     
     match response['Ação']:
         case 0:
-            print(new_df['Descrição'].str.lower() == response['Descrição'].lower())
-            print(new_df['Valor'].str.lower() == response['Valor'].lower())
-            print(new_df['Data do registro'].str.lower() == response['Data'].lower())
-            print(new_df['Tipo'].str.lower() == response['Tipo'].lower())
-            print(new_df['Dia de Pagamento'].str.lower() == response['Dia de Pagamento'].lower())
-            
+            desc_resp = (response['Descrição'] or '').lower()
+            val_resp = (response['Valor'] or '').lower()
+            data_resp = (response['Data'] or '').lower()
+            tipo_resp = (response['Tipo'] or '').lower()
+            pag_resp = (response['Dia de Pagamento'] or '').lower()
+
 
             filtro = (
-            (new_df['Descrição'].str.lower() == response['Descrição'].lower()) & 
-            (new_df['Valor'].str.lower() == response['Valor'].lower()) & 
-            (new_df['Data do registro'].str.lower() == response['Data'].lower()) & 
-            (new_df['Tipo'].str.lower() == response['Tipo'].lower()) &
-            (new_df['Dia de Pagamento'].str.lower() == response['Dia de Pagamento'].lower())
+            (new_df['Descrição'].astype(str).str.lower() == desc_resp) & 
+            (new_df['Valor'].astype(str).str.lower() == val_resp) & 
+            (new_df['Data do registro'].astype(str).str.lower() == data_resp) & 
+            (new_df['Tipo'].astype(str).str.lower() == tipo_resp) &
+            (new_df['Dia de Pagamento'].astype(str).str.lower() == pag_resp)
             )
 
-            print(type(response['Data']))
-            print(type(new_df['Data do registro']))
-            print(new_df['Data do registro'].dtype)
 
-            print(new_df)
             new_df = new_df.drop(new_df[filtro].index)
-            print(new_df[filtro])
-            print(new_df)
-
         case 1:
             new_df.loc[n, 'Descrição'] = response['Descrição']
             new_df.loc[n, 'Valor'] = response['Valor']
