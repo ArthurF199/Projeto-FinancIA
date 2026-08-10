@@ -130,22 +130,34 @@ def Main(page: ft.Page):
         #     page.update()
 
     coluna_botoes = ft.Container(
-        content=ft.Column(
-            controls=[
-                ft.Row(
-                    ft.Button('', icon=ft.Icons.FULLSCREEN, on_click=lambda e: full_screen())),
-                ft.Text("Menu", size=fonte+20, weight="bold"),
-                ft.ElevatedButton(ft.Text("Salário", size=fonte+5), icon=ft.Icons.DASHBOARD, width=200, on_click=mostrar_campo_insercao),
-                ft.ElevatedButton(ft.Text("Analisar Planilha", size=fonte+5), icon=ft.Icons.PIE_CHART, width=200, on_click=analise),
-                ft.ElevatedButton(ft.Text("Reserva de Emergência", size=fonte+5), icon=ft.Icons.SETTINGS, width=200, on_click=reserva_emergência),
-                ft.ElevatedButton(ft.Text("Viver de Renda", size=fonte+5), icon=ft.Icons.SETTINGS, width=200, on_click=viver_renda),
-            ],
-            spacing=15 # Espaço entre os botões
-        ),
-        expand=1, # Ocupa 1 parte do espaço
-        padding=10,
-        # bgcolor=ft.Colors.SURFACE_VARIANT,
-        border_radius=10
+    content=ft.Column(
+        controls=[
+            ft.Text("Menu Principal", size=20, weight="bold", color=ft.Colors.WHITE),
+            ft.Divider(color=ft.Colors.WHITE24), # Linha divisória sutil
+            
+            # Botão com visual mais moderno
+            ft.ElevatedButton(
+                content=ft.Text("Salário", size=fonte+5), 
+                icon=ft.Icons.ATTACH_MONEY, 
+                width=220, 
+                style=ft.ButtonStyle(
+                    shape=ft.RoundedRectangleBorder(radius=8), # Bordas menos redondas
+                    bgcolor=ft.Colors.BLUE_700,
+                    color=ft.Colors.WHITE,
+                    padding=15
+                ),
+                on_click=mostrar_campo_insercao
+            ),
+            # ... outros botões
+        ],
+        spacing=15
+    ),
+    width=250, # Largura fixa para o menu
+    padding=20,
+    bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE), # Fundo levemente translúcido
+    border_radius=15,
+    # border=ft.border.all(1, ft.Colors.WHITE10), # Borda sutil
+    shadow=ft.BoxShadow(blur_radius=15, color=ft.Colors.BLACK26) # Sombra elegante
     )
 
     # ==========================================
@@ -268,3 +280,5 @@ def Main(page: ft.Page):
     page.add(layout_principal)
 
 ft.app(target=Main)
+
+# ADICIONAR GRÁFICO
