@@ -97,28 +97,28 @@ Entrada: {prompt}
     
     match response['Ação']:
         case 0:
-            desc_resp = (response['Descrição'] or '').lower()
-            val_resp = (str(response['Valor']) or '').lower()
-            data_resp = (response['Data'] or '').lower()
-            tipo_resp = (response['Tipo'] or '').lower()
-            pag_resp = (response['Dia de Pagamento'] or '').lower()
+            desc_resp = (response['Descrição'] or '').lower().strip()
+            val_resp = (str(response['Valor']) or '').lower().strip()
+            data_resp = (response['Data'] or '').lower().strip()
+            tipo_resp = (response['Tipo'] or '').lower().strip()
+            pag_resp = (response['Dia de Pagamento'] or '').lower().strip()
 
 
             filtro = (
-            (new_df['Descrição'].astype(str).str.lower() == desc_resp) & 
-            (new_df['Valor'].astype(str).str.lower() == val_resp) & 
-            (new_df['Data do registro'].astype(str).str.lower() == data_resp) & 
-            (new_df['Tipo'].astype(str).str.lower() == tipo_resp) &
-            (new_df['Dia de Pagamento'].astype(str).str.lower() == pag_resp)
+            (new_df['Descrição'].astype(str).str.lower().str.strip() == desc_resp) & 
+            (new_df['Valor'].astype(str).str.lower().str.strip() == val_resp) & 
+            (new_df['Data do registro'].astype(str).str.lower().str.strip() == data_resp) & 
+            (new_df['Tipo'].astype(str).str.lower().str.strip() == tipo_resp) &
+            (new_df['Dia de Pagamento'].astype(str).str.lower().str.strip() == pag_resp)
             )
 
 
             new_df = new_df.drop(new_df[filtro].index)
         case 1:
-            new_df.loc[n, 'Descrição'] = response['Descrição']
-            new_df.loc[n, 'Valor'] = response['Valor']
-            new_df.loc[n, 'Data do registro'] = response['Data']
-            new_df.loc[n, 'Tipo'] = response['Tipo']
+            new_df.loc[n, 'Descrição'] = response['Descrição'].strip()
+            new_df.loc[n, 'Valor'] = float(response['Valor'])
+            new_df.loc[n, 'Data do registro'] = response['Data'].strip()
+            new_df.loc[n, 'Tipo'] = response['Tipo'].strip()
             new_df.loc[n, 'Dia de Pagamento'] = response['Dia de Pagamento']
     return (new_df, response['Ação'])
 
