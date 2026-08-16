@@ -3,6 +3,8 @@ import pandas as pd
 from ia import *
 from main import registerData
 import os
+import threading
+from time import sleep
 
 
 def Main(page: ft.Page):
@@ -37,8 +39,8 @@ def Main(page: ft.Page):
         nonlocal df # Garante que estamos mexendo no df principal
         
         valor = campo_input.value
-        if valor != "":
-            df.loc[0, 'Salário'] = valor
+        if valor != "" and isinstance(valor, float):
+            df.loc[0, 'Salário'] = float(valor)
 
             # Opcional: Salva no Excel para não perder
             df = df.fillna('')
@@ -83,7 +85,7 @@ def Main(page: ft.Page):
         nonlocal df
         salario = df.loc[0, 'Salário']
         if salario != '':
-            df.loc[0, 'Reserva de Emergência'] = str(int(salario) * 6)
+            df.loc[0, 'Reserva de Emergência'] = salario * 6
             df.fillna('')
             df.to_excel(dataxlsx, index=False)
 
@@ -98,8 +100,8 @@ def Main(page: ft.Page):
         nonlocal df
         salario = df.loc[0, 'Salário']
         if salario != '':
-            df.loc[0, 'Viver de Renda'] = f"{int(salario) * 120}"
-            df.loc[0, 'Aporte Mensal'] = f"{int(salario) * 0.2:.0f}"
+            df.loc[0, 'Viver de Renda'] = f"{salario * 120}"
+            df.loc[0, 'Aporte Mensal'] = f"{salario * 0.2:.0f}"
             df.fillna('')
             df.to_excel(dataxlsx, index=False)
 
@@ -124,17 +126,24 @@ def Main(page: ft.Page):
         Me diga se estou fazendo um bom gerenciamento do meu dinheiro e me dê sugestões do que eu deveria fazer em relação ao meu financeiro.
         Lembre-se de responder de forma curta e resumida.
         """
-        mensagem_ia = ft.Text("Sistema: Analisando dados...", color=ft.Colors.GREEN)
+        mensagem_ia = ft.Text("Sistema: Analisando dados...", color=ft.Colors.GREEN, size=fonte+5)
         lista_mensagens.controls.append(mensagem_ia)
         page.update()
-        
-        resposta = Gemma4(prompt)
-        mensagem_ia.value = f"Sistema: {resposta}"
-        page.update()
-        # for token in resposta:
-        #     mensagem_ia.value += token
-        #     page.update()
 
+        def processar_ia():
+            try:
+                resposta = Gemma4(prompt, stream=True)
+                mensagem_ia.value = f"Sistema: "
+                page.update()
+                for token in resposta:
+                    mensagem_ia.value += token
+                    page.update()
+            except Exception as e:
+                mensagem_ia.value = f'Sistema: Erro ao analisar {e}'
+                mensagem_ia.color = ft.Colors.RED
+                page.update()
+
+        threading.Thread(target=processar_ia, daemon=True).start()
 
     def hover_botao(e):
         e.control.scale = 1.1 if e.data == True else 1.0
@@ -263,7 +272,7 @@ def Main(page: ft.Page):
     # ==========================================
     # ListView permite rolar a tela se houver muitas mensagens
     lista_mensagens = ft.ListView(expand=True, spacing=10)
-    lista_mensagens.controls.append(ft.Text("Sistema: Chat iniciado.", color=ft.Colors.GREEN, selectable=True))
+    lista_mensagens.controls.append(ft.Text("Sistema: Chat iniciado.", color=ft.Colors.GREEN, selectable=True, size=fonte+5))
 
     campo_mensagem = ft.TextField(hint_text="Digite...", expand=True, color=ft.Colors.ON_SURFACE)
     # Lembra da nossa regra da função com evento 'e'? Aqui está ela em ação!
@@ -274,26 +283,38 @@ def Main(page: ft.Page):
             mensagem_usuario = campo_mensagem.value
             # Limpa o campo
             campo_mensagem.value = ""
+            mensagem_ia = ft.Text("FinancIA: Processando...", size=fonte+5, color=ft.Colors.GREEN, selectable=True)
+            lista_mensagens.controls.append(mensagem_ia)
             page.update()
 
-            try:
-                nonlocal df
-                novo_df, acao = registerData(df, mensagem_usuario)
-                df = novo_df.fillna('')
-                df.to_excel(dataxlsx, index=False)
-                recarregar_tabela()
+            def processar_ia():
+                try:
+                    nonlocal df
+                    novo_df, acao, mensagem_chat = registerData(df, mensagem_usuario)
+                    df = novo_df.fillna('')
 
-                if acao == 0:
-                    resposta = "Registro removido com sucesso."
-                else:
-                    resposta = "Registro adicionado com sucesso."
+                    if acao == 0:
+                        df.to_excel(dataxlsx, index=False)
+                        recarregar_tabela()
+                        mensagem_ia.value = "FinancIA: Registro removido com sucesso."
+                    elif acao == 1:
+                        df.to_excel(dataxlsx, index=False)
+                        recarregar_tabela()
+                        mensagem_ia.value = "FinancIA: Registro adicionado com sucesso."
+                    elif acao == 2:
+                        mensagem_ia.value = "FinancIA: "
+                        for char in mensagem_chat:
+                            mensagem_ia.value += char
+                            sleep(.01)
+                    page.update()
+                except Exception as exc:
+                    mensagem_ia.value = f"FinancIA: Erro ao processar: {exc}"
+                    mensagem_ia.color = ft.Colors.RED
+                    page.update()
 
-                lista_mensagens.controls.append(ft.Text(f"FinancIA: {resposta}", size=fonte+5, color=ft.Colors.GREEN, selectable=True))
-            except Exception as exc:
-                lista_mensagens.controls.append(ft.Text(f"FinancIA: Erro ao processar: {exc}", size=fonte+5, color=ft.Colors.RED, selectable=True))
+            threading.Thread(target=processar_ia, daemon=True).start()
 
-            page.update()
-            return campo_mensagem.value
+
             
 
     
@@ -305,7 +326,7 @@ def Main(page: ft.Page):
     coluna_chat = ft.Container(
         content=ft.Column(
             controls=[
-                ft.Text("FinancIA", size=fonte+5, weight="bold", color=ft.Colors.ON_SURFACE),
+                ft.Text("FinancIA", size=fonte+10, weight="bold", color=ft.Colors.ON_SURFACE),
                 lista_mensagens, # Ocupa o meio do chat
                 ft.Row([campo_mensagem, botao_enviar]) # Fica na base do chat
             ]

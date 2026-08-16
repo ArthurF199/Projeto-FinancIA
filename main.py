@@ -56,7 +56,8 @@ Aqui estão os registros recentes do usuário:
 =================================
 
 Regras para os campos do JSON:
-- "Ação": Inteiro. 1 para adicionar, 0 para remover.
+- "Ação": Inteiro. 1 para adicionar, 0 para remover, 2 para dúvidas financeiras ou bate-papo
+- "Resposta_Chat": Se a ação for 2, escreva aqui a sua dica financeira. Se for 0 ou 1, retorne null
 - "Descrição": String curta resumindo o gasto/receita.
 - "Valor": Número (float/int) usando ponto para decimais. Ex: 150.50.
 - "Data": String no formato "DD/MM/AAAA". Se não informada, use a de hoje ({datetime.now().strftime("%d/%m/%Y")}).
@@ -69,22 +70,25 @@ Se o usuário pedir para remover um registro, olhe nos "DADOS ATUAIS DA PLANILHA
 Exemplos de extrações perfeitas:
 
 Entrada: Recebi meu salário de R$ 3.500,00 hoje.
-Saída: {{"Ação": 1, "Descrição": "Salário", "Valor": 3500.00, "Data": "{datetime.now().strftime("%d/%m/%Y")}", "Tipo": "Entrada", "Dia de Pagamento": null}}
+Saída: {{"Ação": 1, "Resposta_Chat": null, "Descrição": "Salário", "Valor": 3500, "Data": "{datetime.now().strftime("%d/%m/%Y")}", "Tipo": "Entrada", "Dia de Pagamento": null}}
 
 Entrada: Gastei R$ 120,50 no supermercado ontem.
-Saída: {{"Ação": 1, "Descrição": "Supermercado", "Valor": 120.50, "Data": "09/08/2026", "Tipo": "Saída", "Dia de Pagamento": null}}
+Saída: {{"Ação": 1, "Resposta_Chat": null, "Descrição": "Supermercado", "Valor": 120.50, "Data": "15/08/2026", "Tipo": "Saída", "Dia de Pagamento": null}}
 
 Entrada: Todo dia 10 pago R$ 89,90 da internet.
-Saída: {{"Ação": 1, "Descrição": "Internet", "Valor": 89.90, "Data": "{datetime.now().strftime("%d/%m/%Y")}", "Tipo": "Saída", "Dia de Pagamento": "10/08/2026"}}
+Saída: {{"Ação": 1, "Resposta_Chat": null, "Descrição": "Internet", "Valor": 89.90, "Data": "{datetime.now().strftime("%d/%m/%Y")}", "Tipo": "Saída", "Dia de Pagamento": "10/08/2026"}}
 
 Entrada: Remova o gasto de restaurante de R$ 300,00.
-Saída: {{"Ação": 0, "Descrição": "Restaurante", "Valor": 300.00, "Data": "{datetime.now().strftime("%d/%m/%Y")}", "Tipo": "Saída", "Dia de Pagamento": null}}
+Saída: {{"Ação": 0, "Resposta_Chat": null, "Descrição": "Restaurante", "Valor": 300, "Data": "{datetime.now().strftime("%d/%m/%Y")}", "Tipo": "Saída", "Dia de Pagamento": null}}
 
-Entrada: Hoje chegou uma conta de luz no valor de 200 reais para ser paga no dia 20/05/2026.
-Saída: {{"Ação": 1, "Descrição": "Conta de luz", "Valor": 200.00, "Data": "{datetime.now().strftime("%d/%m/%Y")}", "Tipo": "Conta", "Dia de Pagamento": "20/05/2026"}}
+Entrada: Como devo começar a montar minha reserva de emergência?
+Saída: {{"Ação": 2, "Resposta_Chat": "Para começar, calcule seu custo de vida mensal e multiplique por 6. Guarde esse valor gradualmente em investimentos seguros e de alta liquidez, como Tesouro Selic ou um CDB que renda 100% do CDI.", "Descrição": null, "Valor": null, "Data": null, "Tipo": null, "Dia de Pagamento": null}}
 
-Entrada: Paguei a conta de luz que foi registrada no dia 15/05/2026 no valor de 200 reais que era para ser paga no dia 20/05/2026.
-Saída: {{"Ação": 0, "Descrição": "Conta de luz", "Valor": 200.00, "Data": "15/05/2026", "Tipo": "Conta", "Dia de Pagamento": "20/05/2026"}}
+Entrada: Vale a pena financiar um carro em 60 vezes?
+Saída: {{"Ação": 2, "Resposta_Chat": "Geralmente não é recomendado, pois o acúmulo de juros ao longo de 60 meses fará você pagar um valor muito maior pelo veículo. O ideal é poupar para dar uma boa entrada e reduzir os juros e o tempo de financiamento.", "Descrição": null, "Valor": null, "Data": null, "Tipo": null, "Dia de Pagamento": null}}
+
+Entrada: O que é o CDI?
+Saída: {{"Ação": 2, "Resposta_Chat": "O CDI (Certificado de Depósito Interbancário) é uma taxa que os bancos usam para emprestar dinheiro entre si. Ele serve como principal referência (benchmark) para a rentabilidade dos investimentos de renda fixa no Brasil.", "Descrição": null, "Valor": null, "Data": null, "Tipo": null, "Dia de Pagamento": null}}
 
 Agora processe a seguinte entrada do usuário:
 Entrada: {prompt}
@@ -96,6 +100,8 @@ Entrada: {prompt}
     n = len(new_df)
     
     match response['Ação']:
+        case 2:
+            return (new_df, response['Ação'], response['Resposta_Chat'])
         case 0:
             desc_resp = (response['Descrição'] or '').lower().strip()
             val_resp = (str(response['Valor']) or '').lower().strip()
@@ -120,7 +126,7 @@ Entrada: {prompt}
             new_df.loc[n, 'Data do registro'] = response['Data'].strip()
             new_df.loc[n, 'Tipo'] = response['Tipo'].strip()
             new_df.loc[n, 'Dia de Pagamento'] = response['Dia de Pagamento']
-    return (new_df, response['Ação'])
+    return (new_df, response['Ação'], '')
 
 
 clear()
