@@ -39,20 +39,33 @@ def Main(page: ft.Page):
         nonlocal df # Garante que estamos mexendo no df principal
         
         valor = campo_input.value
-        if valor != "" and isinstance(valor, float):
-            df.loc[0, 'Salário'] = float(valor)
+        
+        if valor != "":
+            try:
+                # Substitui vírgula por ponto (para aceitar 1500,00) e converte para float
+                valor_convertido = float(valor.replace(',', '.'))
+                
+                # Atualiza o DataFrame
+                df.loc[0, 'Salário'] = valor_convertido
 
-            # Opcional: Salva no Excel para não perder
-            df = df.fillna('')
-            df.to_excel(dataxlsx, index=False)
-            
-            # Recarrega a tabela visual
-            recarregar_tabela()
-            
-            # Limpa o campo e esconde a área de input
-            campo_input.value = ""
-            area_novo_dado.content = None 
-            page.update()
+                # Opcional: Salva no Excel para não perder
+                # Nota: Não precisa de df = df.fillna('') aqui se quiser manter a integridade, 
+                # mas mantive como no seu original.
+                df.fillna('', inplace=True) 
+                df.to_excel(dataxlsx, index=False)
+                
+                # Recarrega a tabela visual
+                recarregar_tabela()
+                
+                # Limpa o campo e esconde a área de input
+                campo_input.value = ""
+                campo_input.error_text = None # Limpa possíveis erros anteriores
+                fechar_campo() # Você já tem essa função abaixo, pode reaproveitá-la!
+                
+            except ValueError:
+                # Se o usuário digitar letras (ex: "abc"), vai cair aqui
+                campo_input.error_text = "Digite um número válido"
+                page.update()
 
     area_novo_dado = ft.Container() 
 
@@ -150,6 +163,7 @@ def Main(page: ft.Page):
         e.control.bgcolor = ft.Colors.BLUE_600 if e.data == True else ft.Colors.BLUE_700
         e.control.update()
 
+
     def botao(texto, icone, ao_clicar):
         return ft.Container(
             content=ft.Column(
@@ -206,11 +220,92 @@ def Main(page: ft.Page):
     df = pd.DataFrame(df).fillna('')  # Preenche valores nulos com string vazia
 
     tabela_financeira = ft.DataTable(columns=[], rows=[], column_spacing=105)
+
+    is_visao_dados = False
+    visualizacao_atual = [
+        "Data do registro",
+        "Descrição",
+        "Valor",
+        "Tipo",
+        "Dia de Pagamento"
+    ]
+
     
+    def alternar_visao(e):
+        nonlocal is_visao_dados
+        nonlocal visualizacao_atual
+
+        is_visao_dados = not is_visao_dados
+
+        if is_visao_dados:
+            visualizacao_atual = [
+                "Salário",
+                "Reserva de Emergência",
+                "Viver de Renda",
+                "Aporte Mensal"
+            ]
+
+        else:
+            visualizacao_atual = [
+                "Data do registro",
+                "Descrição",
+                "Valor",
+                "Tipo",
+                "Dia de Pagamento"
+            ]
+
+        recarregar_tabela()
+        page.update()
+        e.control.update()
+    
+
+    def recarregar_tabela():
+        tabela = tabela_financeira
+        tabela.columns.clear()
+        tabela.rows.clear()
+        
+        # 1. Cria os cabeçalhos da tabela APENAS para as colunas visíveis
+        for coluna in visualizacao_atual:
+            # É bom checar se a coluna existe no df para evitar erros caso a planilha mude
+            if coluna in df.columns:
+                cabecalho = ft.Container(
+                    content=ft.Text(coluna, weight="bold", size=fonte+5, color=ft.Colors.ON_SURFACE),
+                    on_click=lambda e: print(1)
+                )
+                tabela.columns.append(ft.DataColumn(cabecalho))
+
+        # 2. Preenche as linhas buscando os valores apenas dessas colunas
+        for indice, linha in df.iterrows():
+            linhas_celulas = []
+            for coluna in visualizacao_atual:
+                if coluna in df.columns:
+                    valor = linha[coluna] # Pega o valor específico daquela coluna
+                    if isinstance(valor, (int, float)):
+                        linhas_celulas.append(ft.DataCell(ft.Text("R$ "+f"{valor:.2f}", color=ft.Colors.WHITE)))
+                    else:
+                        linhas_celulas.append(ft.DataCell(ft.Text(str(valor), color=ft.Colors.WHITE)))
+
+            
+            tabela.rows.append(ft.DataRow(cells=linhas_celulas))
+
     planilha = ft.Container(
         content=ft.Column(
             controls=[
-                ft.Text("Planilha Financeira", size=fonte+15, weight="bold", color=ft.Colors.WHITE),
+                ft.Row([
+                    ft.Text("Planilha Financeira", size=fonte+15, weight="bold", color=ft.Colors.WHITE),
+                    ft.Container(
+                        content=ft.Icon(
+                            ft.Icons.SWITCH_ACCESS_SHORTCUT,
+                            color=ft.Colors.WHITE
+                        ),
+                        bgcolor=ft.Colors.BLACK_26,
+                        height=30,
+                        width=30,
+                        border_radius=30,
+                        margin=ft.Margin.only(top=5),
+                        on_click=alternar_visao
+                    )
+                ]),
 
                 area_novo_dado,
 
@@ -225,46 +320,6 @@ def Main(page: ft.Page):
         expand=5, # Ocupa 3 partes do espaço
         padding=10
     )
-    
-    def recarregar_tabela():
-        tabela = tabela_financeira
-        tabela.columns.clear()
-        tabela.rows.clear()
-        
-        # 1. Defina exatamente quais colunas vão aparecer na tela e em qual ordem
-        colunas_visiveis = [
-            "Data do registro", 
-            "Descrição", 
-            "Valor", 
-            "Tipo", 
-            "Dia de Pagamento"
-        ]
-        
-        # 2. Cria os cabeçalhos da tabela APENAS para as colunas visíveis
-        for coluna in colunas_visiveis:
-            # É bom checar se a coluna existe no df para evitar erros caso a planilha mude
-            if coluna in df.columns:
-                cabecalho = ft.Container(
-                    content=ft.Text(coluna, weight="bold", size=fonte+5, color=ft.Colors.ON_SURFACE),
-                    bgcolor=ft.Colors.BLACK_12,
-                    border_radius=0
-                )
-                tabela.columns.append(ft.DataColumn(cabecalho))
-
-        # 3. Preenche as linhas buscando os valores apenas dessas colunas
-        for indice, linha in df.iterrows():
-            linhas_celulas = []
-            for coluna in colunas_visiveis:
-                if coluna in df.columns:
-                    valor = linha[coluna] # Pega o valor específico daquela coluna
-                    if coluna == "Valor" and linha['Valor'] != "":
-                        linhas_celulas.append(ft.DataCell(ft.Text("R$ "+f"{valor:.2f}", color=ft.Colors.WHITE)))
-                    else:
-                        linhas_celulas.append(ft.DataCell(ft.Text(str(valor), color=ft.Colors.WHITE)))
-
-            
-            tabela.rows.append(ft.DataRow(cells=linhas_celulas))
-
 
     recarregar_tabela()
     # ==========================================
@@ -305,6 +360,7 @@ def Main(page: ft.Page):
                         mensagem_ia.value = "FinancIA: "
                         for char in mensagem_chat:
                             mensagem_ia.value += char
+                            page.update()
                             sleep(.01)
                     page.update()
                 except Exception as exc:
@@ -313,9 +369,6 @@ def Main(page: ft.Page):
                     page.update()
 
             threading.Thread(target=processar_ia, daemon=True).start()
-
-
-            
 
     
     # O botão de enviar dispara a função acima

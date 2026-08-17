@@ -67,6 +67,8 @@ Regras para os campos do JSON:
 IMPORTANTE PARA REMOÇÕES (Ação 0): 
 Se o usuário pedir para remover um registro, olhe nos "DADOS ATUAIS DA PLANILHA" acima, identifique de qual registro ele está falando e copie os dados EXATOS (Descrição, Valor, Data e Tipo) para preencher o JSON.
 
+CASO O USUÁRIO PEÇA PARA REMOVER ALGO QUE NÃO ESTEJA NA PLANILHA RETORNE A AÇÃO 2 E DIGA QUE NÃO TEM ACESSO A TAL REGISTRO.
+
 Exemplos de extrações perfeitas:
 
 Entrada: Recebi meu salário de R$ 3.500,00 hoje.
