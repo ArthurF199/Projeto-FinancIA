@@ -34,8 +34,8 @@ def Gemma4(prompt: str, num_predict: int = 300, stream: bool = False):
         },
 
         think=False,
-        stream=stream
-        host=IP_DESKTOP
+        stream=stream,
+        host=f"http://{IP_DESKTOP}:11434"
     )
 
     if stream:
