@@ -6,9 +6,10 @@ from dotenv import load_dotenv
 load_dotenv
 
 IP_DESKTOP = os.getenv("")
+OLLAMA_CLIENT = Client(host=f"http://{IP_DESKTOP}:11434")
 
 def Gemma4(prompt: str, num_predict: int = 300, stream: bool = False):
-    output = Client.chat(
+    output = OLLAMA_CLIENT.chat(
         model="gemma4",
         messages=[
             {
@@ -34,8 +35,7 @@ def Gemma4(prompt: str, num_predict: int = 300, stream: bool = False):
         },
 
         think=False,
-        stream=stream,
-        host=f"http://{IP_DESKTOP}:11434"
+        stream=stream
     )
 
     if stream:
