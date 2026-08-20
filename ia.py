@@ -1,4 +1,4 @@
-from ollama import Client
+from ollama import chat
 import pandas as pd
 import os
 from dotenv import load_dotenv
@@ -9,7 +9,7 @@ IP_DESKTOP = os.getenv("")
 OLLAMA_CLIENT = Client(host=f"http://{IP_DESKTOP}:11434")
 
 def Gemma4(prompt: str, num_predict: int = 300, stream: bool = False):
-    output = OLLAMA_CLIENT.chat(
+    output = chat(
         model="gemma4",
         messages=[
             {
