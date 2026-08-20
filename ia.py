@@ -1,9 +1,10 @@
-from ollama import chat
+from ollama import Client
 import pandas as pd
 
+IP_DESKTOP = 
 
 def Gemma4(prompt: str, num_predict: int = 300, stream: bool = False):
-    output = chat(
+    output = Client.chat(
         model="gemma4",
         messages=[
             {
@@ -30,6 +31,7 @@ def Gemma4(prompt: str, num_predict: int = 300, stream: bool = False):
 
         think=False,
         stream=stream
+        host=
     )
 
     if stream:
