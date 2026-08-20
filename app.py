@@ -407,9 +407,9 @@ def Main(page: ft.Page):
 
     page.add(layout_principal)
 
-# if __name__ == "__main__":
-#     ft.run(Main, view=ft.AppView.WEB_BROWSER)
-
-ft.app(target=Main, view=ft.AppView.WEB_BROWSER)
+if __name__ == "__main__":
+    ft.run(Main, view=ft.AppView.WEB_BROWSER,
+           host="0.0.0.0",
+           port=8550)
 
 # ADICIONAR GRÁFICO
