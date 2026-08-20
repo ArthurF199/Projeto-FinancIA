@@ -131,7 +131,7 @@ Entrada: {prompt}
     return (new_df, response['Ação'], '')
 
 
-clear()
+# clear()
 # while True:
 #     ft.app(target=app.main)
 #     df = pd.read_excel('data.xlsx')
