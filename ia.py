@@ -1,7 +1,11 @@
 from ollama import Client
 import pandas as pd
+import os
+from dotenv import load_dotenv
 
-IP_DESKTOP = 
+load_dotenv
+
+IP_DESKTOP = os.getenv("")
 
 def Gemma4(prompt: str, num_predict: int = 300, stream: bool = False):
     output = Client.chat(
@@ -31,7 +35,7 @@ def Gemma4(prompt: str, num_predict: int = 300, stream: bool = False):
 
         think=False,
         stream=stream
-        host=
+        host=IP_DESKTOP
     )
 
     if stream:
