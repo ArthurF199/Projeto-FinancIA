@@ -292,7 +292,7 @@ def Main(page: ft.Page):
         content=ft.Column(
             controls=[
                 ft.Row([
-                    ft.Text("Planilha Financeira penis", size=fonte+15, weight="bold", color=ft.Colors.WHITE),
+                    ft.Text("xereca", size=fonte+15, weight="bold", color=ft.Colors.WHITE),
                     ft.Container(
                         content=ft.Icon(
                             ft.Icons.SWITCH_ACCESS_SHORTCUT,
