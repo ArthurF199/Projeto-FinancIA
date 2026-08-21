@@ -57,7 +57,7 @@ load_dotenv()
 
 # Correção: adicionei o nome da variável (ex: "IP_DESKTOP") e um valor padrão de fallback
 IP_DESKTOP = os.getenv("IP_DESKTOP", "127.0.0.1") 
-OLLAMA_URL = f"http://192.168.15.15:11434/api/chat"
+OLLAMA_URL = f"http://{IP_DESKTOP}:11434/api/chat"
 
 def Gemma4(prompt: str, num_predict: int = 300, stream: bool = False):
     
