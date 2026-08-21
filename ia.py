@@ -57,13 +57,13 @@ load_dotenv()
 
 # Correção: adicionei o nome da variável (ex: "IP_DESKTOP") e um valor padrão de fallback
 IP_DESKTOP = os.getenv("IP_DESKTOP", "127.0.0.1") 
-OLLAMA_URL = f"http://{IP_DESKTOP}:11434/api/chat"
+OLLAMA_URL = f"http://192.168.15.15:11434/api/chat"
 
 def Gemma4(prompt: str, num_predict: int = 300, stream: bool = False):
     
     # Montamos o corpo da requisição idêntico à documentação da API REST do Ollama
     payload = {
-        "model": "gemma4",
+        "model": "qwen2.5:3b",
         "messages": [
             {
                 "role": "system",
@@ -93,7 +93,7 @@ def Gemma4(prompt: str, num_predict: int = 300, stream: bool = False):
         # Lógica para o modo Stream usando o iter_lines() do requests
         def gerador():
             try:
-                with requests.post(OLLAMA_URL, json=payload, stream=True, timeout=60) as response:
+                with requests.post(OLLAMA_URL, json=payload, stream=True) as response:
                     response.raise_for_status() # Verifica se deu erro HTTP 
                     
                     for linha in response.iter_lines():

@@ -203,7 +203,8 @@ def Main(page: ft.Page):
             botao("Reserva de Emergência", ft.Icons.SAVINGS, reserva_emergencia),
             botao("Viver de Renda", ft.Icons.SAVINGS, viver_renda),
         ],
-        spacing=30
+        spacing=30,
+        scroll=ft.ScrollMode.ADAPTIVE
     ),
     width=300, # Largura fixa para o menu
     padding=20,
@@ -409,7 +410,7 @@ def Main(page: ft.Page):
 
 if __name__ == "__main__":
     ft.run(Main, view=ft.AppView.WEB_BROWSER,
-           host="127.0.0.1",
+           host="0.0.0.0",
            port=8550)
 
 # ADICIONAR GRÁFICO
