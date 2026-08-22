@@ -93,7 +93,7 @@ def Gemma4(prompt: str, num_predict: int = 300, stream: bool = False):
         # Lógica para o modo Stream usando o iter_lines() do requests
         def gerador():
             try:
-                with requests.post(OLLAMA_URL, json=payload, stream=True) as response:
+                with requests.post(OLLAMA_URL, json=payload, stream=True, timeout=60) as response:
                     response.raise_for_status() # Verifica se deu erro HTTP 
                     
                     for linha in response.iter_lines():
@@ -110,7 +110,7 @@ def Gemma4(prompt: str, num_predict: int = 300, stream: bool = False):
     else:
         # Lógica para resposta direta (sem stream)
         try:
-            response = requests.post(OLLAMA_URL, json=payload, timeout=60)
+            response = requests.post(OLLAMA_URL, json=payload, timeout=(5, 300))
             response.raise_for_status()
             
             dados = response.json()

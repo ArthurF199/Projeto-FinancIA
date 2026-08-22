@@ -203,8 +203,7 @@ def Main(page: ft.Page):
             botao("Reserva de Emergência", ft.Icons.SAVINGS, reserva_emergencia),
             botao("Viver de Renda", ft.Icons.SAVINGS, viver_renda),
         ],
-        spacing=30,
-        scroll=ft.ScrollMode.ADAPTIVE
+        spacing=30
     ),
     width=300, # Largura fixa para o menu
     padding=20,
