@@ -203,7 +203,8 @@ def Main(page: ft.Page):
             botao("Reserva de Emergência", ft.Icons.SAVINGS, reserva_emergencia),
             botao("Viver de Renda", ft.Icons.SAVINGS, viver_renda),
         ],
-        spacing=30
+        spacing=30,
+        scroll=ft.ScrollMode.ADAPTIVE
     ),
     width=300, # Largura fixa para o menu
     padding=20,
@@ -326,46 +327,78 @@ def Main(page: ft.Page):
     # 3. COLUNA DIREITA (Chat)
     # ==========================================
     # ListView permite rolar a tela se houver muitas mensagens
-    lista_mensagens = ft.ListView(expand=True, spacing=10)
-    lista_mensagens.controls.append(ft.Text("Sistema: Chat iniciado.", color=ft.Colors.GREEN, selectable=True, size=fonte+5))
-
+    lista_mensagens = ft.ListView(expand=True, spacing=10, auto_scroll=True)
+    def mensagem(texto: str = "", user: bool = True):
+        texto_control = ft.Text(texto,
+                                size=fonte+5,
+                                color=ft.Colors.WHITE,
+                                selectable=True)
+        
+        row = ft.Row(
+                    alignment=ft.MainAxisAlignment.END if user else ft.MainAxisAlignment.START,
+                    controls=[
+                        ft.Container(
+                            width=page.width * 0.22 * 0.7, # 70% do tamanho do chat
+                            bgcolor=ft.Colors.BLACK54 if user else ft.Colors.BLACK26,
+                            border_radius=20,
+                            padding=10,
+                            content=texto_control)
+                    ],
+                    wrap=True
+                )
+        return row, texto_control
     campo_mensagem = ft.TextField(hint_text="Digite...", expand=True, color=ft.Colors.ON_SURFACE)
     # Lembra da nossa regra da função com evento 'e'? Aqui está ela em ação!
     def enviar_mensagem(e):
         if campo_mensagem.value != "":
             # Adiciona o texto na lista de mensagens
-            lista_mensagens.controls.append(ft.Text(f"Você: {campo_mensagem.value}", size=fonte+5, selectable=True, color=ft.Colors.ON_SURFACE))
-            mensagem_usuario = campo_mensagem.value
-            # Limpa o campo
+            mensagem_usuario = mensagem(campo_mensagem.value)[0]
+            lista_mensagens.controls.append(mensagem_usuario)
             campo_mensagem.value = ""
-            mensagem_ia = ft.Text("FinancIA: Processando...", size=fonte+5, color=ft.Colors.GREEN, selectable=True)
-            lista_mensagens.controls.append(mensagem_ia)
             page.update()
 
             def processar_ia():
+                sleep(.2) # Pequeno atraso estético
+
+                mensagem_ia, txt_stream = mensagem("Processando...", user=False)
+                lista_mensagens.controls.append(mensagem_ia)
+                lista_mensagens.update()
+
+
                 try:
                     nonlocal df
-                    novo_df, acao, mensagem_chat = registerData(df, mensagem_usuario)
+                    novo_df, acao, mensagem_chat = registerData(df, mensagem_usuario.controls[0].content.value)
                     df = novo_df.fillna('')
 
                     if acao == 0:
                         df.to_excel(dataxlsx, index=False)
                         recarregar_tabela()
-                        mensagem_ia.value = "FinancIA: Registro removido com sucesso."
+                        txt_stream.value = ""
+                        txt_stream.color = ft.Colors.RED
+                        for char in "Registro removido com sucesso.":
+                            txt_stream.value += char
+                            mensagem_ia.update()
+                            sleep(.01)
+
                     elif acao == 1:
                         df.to_excel(dataxlsx, index=False)
                         recarregar_tabela()
-                        mensagem_ia.value = "FinancIA: Registro adicionado com sucesso."
+                        txt_stream.value = "" 
+                        txt_stream.color = ft.Colors.GREEN
+                        for char in "Registro adicionado com sucesso.":
+                            txt_stream.value += char
+                            mensagem_ia.update()
+                            sleep(.01)
                     elif acao == 2:
-                        mensagem_ia.value = "FinancIA: "
+                        txt_stream.value = ""
                         for char in mensagem_chat:
-                            mensagem_ia.value += char
+                            txt_stream.value += char
                             page.update()
                             sleep(.01)
                     page.update()
                 except Exception as exc:
-                    mensagem_ia.value = f"FinancIA: Erro ao processar: {exc}"
-                    mensagem_ia.color = ft.Colors.RED
+                    mensagem_ia.controls[0].content.value = f"Erro ao processar: {exc}"
+                    mensagem_ia.controls[0].content.color = ft.Colors.RED
                     page.update()
 
             threading.Thread(target=processar_ia, daemon=True).start()
@@ -382,12 +415,12 @@ def Main(page: ft.Page):
                 ft.Text("FinancIA", size=fonte+10, weight="bold", color=ft.Colors.ON_SURFACE),
                 lista_mensagens, # Ocupa o meio do chat
                 ft.Row([campo_mensagem, botao_enviar]) # Fica na base do chat
-            ]
+            ],
         ),
         expand=2, # Ocupa 2 partes do espaço
         padding=10,
         # bgcolor=ft.Colors.SURFACE_VARIANT,
-        border_radius=10
+        border_radius=10,
     )
 
     # ==========================================

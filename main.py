@@ -7,10 +7,6 @@ from datetime import datetime
 import flet as ft
 
 
-def teste():
-    return 'fodase'
-
-
 def saveXLSX(df):
     try:
         while True:

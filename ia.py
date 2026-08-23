@@ -63,7 +63,7 @@ def Gemma4(prompt: str, num_predict: int = 300, stream: bool = False):
     
     # Montamos o corpo da requisição idêntico à documentação da API REST do Ollama
     payload = {
-        "model": "qwen2.5:3b",
+        "model": "gemma4",
         "messages": [
             {
                 "role": "system",
