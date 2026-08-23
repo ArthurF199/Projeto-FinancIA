@@ -26,7 +26,10 @@ def Main(page: ft.Page):
             body_medium=ft.TextStyle(size=fonte),   # Tamanho padrão do texto comum
             body_large=ft.TextStyle(size=fonte+fonte*.3),    # Texto ligeiramente maior
             title_medium=ft.TextStyle(size=fonte+fonte*.6), # Títulos de tabelas/cards
-            title_large=ft.TextStyle(size=fonte+fonte*2)   # Títulos de páginas
+            title_large=ft.TextStyle(size=fonte+fonte*2),   # Títulos de páginas
+        ),
+        scrollbar_theme=ft.ScrollbarTheme(
+            thickness=1
         )
     )
 
@@ -442,7 +445,7 @@ def Main(page: ft.Page):
 
 if __name__ == "__main__":
     ft.run(Main, view=ft.AppView.WEB_BROWSER,
-           host="0.0.0.0",
+           host="127.0.0.1",
            port=8550)
 
 # ADICIONAR GRÁFICO
