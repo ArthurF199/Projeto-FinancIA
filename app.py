@@ -106,6 +106,7 @@ def Main(page: ft.Page):
             df.to_excel(dataxlsx, index=False)
 
             recarregar_tabela()
+            atualizar_informacoes()
 
             page.update()
         else:
@@ -122,7 +123,8 @@ def Main(page: ft.Page):
             df.to_excel(dataxlsx, index=False)
 
             recarregar_tabela()
-
+            atualizar_informacoes()
+            
             page.update()
         else:
             mostrar_campo_insercao
@@ -224,8 +226,8 @@ def Main(page: ft.Page):
     df = pd.DataFrame(df).fillna('')  # Preenche valores nulos com string vazia
 
     tabela_financeira = ft.DataTable(columns=[], rows=[], column_spacing=105)
-
-    is_visao_dados = False
+    tela_central = None
+    is_visao_dados = True
     visualizacao_atual = [
         "Data do registro",
         "Descrição",
@@ -234,34 +236,59 @@ def Main(page: ft.Page):
         "Dia de Pagamento"
     ]
 
+    # Crie as variáveis para os textos que vão mudar
+    texto_salario = ft.Text(f"R$ {df.loc[0, 'Salário']:.2f}",
+                            size=fonte+5,
+                            color=ft.Colors.WHITE,
+                            text_align=ft.TextAlign.CENTER)
     
+    texto_reserva = ft.Text(f"R$ {df.loc[0, 'Reserva de Emergência']:.2f}",
+                            size=fonte+5,
+                            color=ft.Colors.WHITE,
+                            text_align=ft.TextAlign.CENTER)
+    
+    texto_renda = ft.Text(f"R$ {df.loc[0, 'Viver de Renda']:.2f}",
+                          size=fonte+5, color=ft.Colors.WHITE,
+                          text_align=ft.TextAlign.CENTER)
+    
+    texto_aporte = ft.Text(f"R$ {df.loc[0, 'Aporte Mensal']:.2f}",
+                           size=fonte+5,
+                           color=ft.Colors.WHITE,
+                           text_align=ft.TextAlign.CENTER)
+
+    def atualizar_informacoes():
+        # ATENÇÃO: Se o arquivo do Excel mudou no computador, 
+        # você precisa ler ele de novo descomentando a linha abaixo:
+        nonlocal df 
+        df = pd.read_excel(dataxlsx).fillna('')
+        
+        # Atualiza os valores dos textos na tela
+        texto_salario.value = f"R$ {df.loc[0, 'Salário']:.2f}"
+        texto_reserva.value = f"R$ {df.loc[0, 'Reserva de Emergência']:.2f}"
+        texto_renda.value = f"R$ {df.loc[0, 'Viver de Renda']:.2f}"
+        texto_aporte.value = f"R$ {df.loc[0, 'Aporte Mensal']:.2f}"
+        
+        # Se a tela de informações estiver visível, atualiza ela
+        # if tela_informacoes:
+        #     tela_informacoes.update()flet run app.py --web
+
     def alternar_visao(e):
         nonlocal is_visao_dados
-        nonlocal visualizacao_atual
+        # Não precisa do nonlocal tela_central se vamos apenas alterar uma propriedade dela
 
         is_visao_dados = not is_visao_dados
 
         if is_visao_dados:
-            visualizacao_atual = [
-                "Salário",
-                "Reserva de Emergência",
-                "Viver de Renda",
-                "Aporte Mensal"
-            ]
-
+            recarregar_tabela()
+            tela_central.content = planilha
         else:
-            visualizacao_atual = [
-                "Data do registro",
-                "Descrição",
-                "Valor",
-                "Tipo",
-                "Dia de Pagamento"
-            ]
+            atualizar_informacoes()
+            tela_central.content = tela_informacoes
 
-        recarregar_tabela()
-        page.update()
-        e.control.update()
-    
+        # Atualiza o container que segura as telas
+        tela_central.update() 
+        
+        print(is_visao_dados)
 
     def recarregar_tabela():
         tabela = tabela_financeira
@@ -273,8 +300,7 @@ def Main(page: ft.Page):
             # É bom checar se a coluna existe no df para evitar erros caso a planilha mude
             if coluna in df.columns:
                 cabecalho = ft.Container(
-                    content=ft.Text(coluna, weight="bold", size=fonte+5, color=ft.Colors.ON_SURFACE),
-                    on_click=lambda e: print(1)
+                    content=ft.Text(coluna, weight="bold", size=fonte+5, color=ft.Colors.ON_SURFACE)
                 )
                 tabela.columns.append(ft.DataColumn(cabecalho))
 
@@ -326,6 +352,144 @@ def Main(page: ft.Page):
     )
 
     recarregar_tabela()
+
+    tela_informacoes = ft.Container(
+        content=ft.Column(
+            controls=[
+                ft.Row([
+                    ft.Text("Informações", size=fonte+15, weight="bold", color=ft.Colors.WHITE),
+                    ft.Container(
+                        content=ft.Icon(
+                            ft.Icons.SWITCH_ACCESS_SHORTCUT,
+                            color=ft.Colors.WHITE
+                        ),
+                        bgcolor=ft.Colors.BLACK_26,
+                        height=30,
+                        width=30,
+                        border_radius=30,
+                        margin=ft.Margin.only(top=5),
+                        on_click=alternar_visao
+                    )
+                ]),
+                ft.Row([
+                    ft.Column([
+                        ft.Container(
+                            ft.Column([
+                                ft.Row(
+                                    ft.Text("Salário",
+                                            size=fonte+10,
+                                            weight="bold",
+                                            color=ft.Colors.WHITE),
+                                    alignment=ft.MainAxisAlignment.CENTER
+                                ),
+                                ft.Container(
+                                    texto_salario,
+                                    bgcolor=ft.Colors.BLACK26,
+                                    border_radius=25,
+                                    width=300,
+                                    height=75,
+                                    padding=20,
+                                ),
+                            ]),
+                            bgcolor=ft.Colors.BLACK12,
+                            border_radius=25,
+                            height=150,
+                            width=300,
+                            padding=ft.Padding.all(10),
+                        )
+                    ]),
+                    ft.Column([
+                        ft.Container(
+                            ft.Column([
+                                ft.Row(
+                                    ft.Text("Reserva de Emergência",
+                                            size=fonte+10,
+                                            weight="bold",
+                                            color=ft.Colors.WHITE),
+                                    alignment=ft.MainAxisAlignment.CENTER
+                                ),
+                                ft.Container(
+                                    texto_reserva,
+                                    bgcolor=ft.Colors.BLACK26,
+                                    border_radius=25,
+                                    width=300,
+                                    height=75,
+                                    padding=20,
+                                ),
+                            ]),
+                            bgcolor=ft.Colors.BLACK12,
+                            border_radius=25,
+                            height=150,
+                            width=300,
+                            padding=ft.Padding.all(10),
+                        )
+                    ])
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                ft.Row([
+                    ft.Column([
+                        ft.Container(
+                            ft.Column([
+                                ft.Row(
+                                    ft.Text("Viver de Renda",
+                                            size=fonte+10,
+                                            weight="bold",
+                                            color=ft.Colors.WHITE),
+                                    alignment=ft.MainAxisAlignment.CENTER
+                                ),
+                                ft.Container(
+                                    texto_renda,
+                                    bgcolor=ft.Colors.BLACK26,
+                                    border_radius=25,
+                                    width=300,
+                                    height=75,
+                                    padding=20,
+                                ),
+                            ]),
+                            bgcolor=ft.Colors.BLACK12,
+                            border_radius=25,
+                            height=150,
+                            width=300,
+                            padding=ft.Padding.all(10),
+                        )
+                    ]),
+                    ft.Column([
+                        ft.Container(
+                            ft.Column([
+                                ft.Row(
+                                    ft.Text("Aporte Mensal",
+                                            size=fonte+10,
+                                            weight="bold",
+                                            color=ft.Colors.WHITE),
+                                    alignment=ft.MainAxisAlignment.CENTER
+                                ),
+                                ft.Container(
+                                    texto_aporte,
+                                    bgcolor=ft.Colors.BLACK26,
+                                    border_radius=25,
+                                    width=300,
+                                    height=75,
+                                    padding=20,
+                                ),
+                            ]),
+                            bgcolor=ft.Colors.BLACK12,
+                            border_radius=25,
+                            height=150,
+                            width=300,
+                            padding=ft.Padding.all(10),
+                        )
+                    ]),
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+            ],
+            expand=True
+        ),
+        expand=5,
+        padding=10
+    )
+
+    tela_central = ft.Container(
+       content=planilha, # Inicia mostrando a planilha
+       expand=5          # Mantém a mesma proporção de tela que você configurou
+    )
     # ==========================================
     # 3. COLUNA DIREITA (Chat)
     # ==========================================
@@ -434,7 +598,7 @@ def Main(page: ft.Page):
         controls=[
             coluna_botoes,
             ft.VerticalDivider(width=1), # Uma linha vertical separando
-            planilha,
+            tela_central,
             ft.VerticalDivider(width=1),
             coluna_chat
         ],
