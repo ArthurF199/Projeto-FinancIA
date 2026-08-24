@@ -209,7 +209,21 @@ def Main(page: ft.Page):
     tabela_financeira = ft.DataTable(columns=[], rows=[], column_spacing=105)
     tela_central = ft.Container(
         ft.Column([
-            ft.Text("Teste"),
+            ft.Row([
+                ft.Text("Planilha Financeira", size=fonte+15, weight="bold", color=ft.Colors.WHITE),
+                ft.Container(
+                    content=ft.Icon(
+                        ft.Icons.SWITCH_ACCESS_SHORTCUT,
+                        color=ft.Colors.WHITE
+                    ),
+                    bgcolor=ft.Colors.BLACK_26,
+                    height=30,
+                    width=30,
+                    border_radius=30,
+                    margin=ft.Margin.only(top=5),
+                    on_click=alternar_visao
+                )
+            ]),
             ft.Container()
         ]),
         expand=5
@@ -309,22 +323,6 @@ def Main(page: ft.Page):
     planilha = ft.Container(
         content=ft.Column(
             controls=[
-                # ft.Row([
-                #     ft.Text("Planilha Financeira", size=fonte+15, weight="bold", color=ft.Colors.WHITE),
-                #     ft.Container(
-                #         content=ft.Icon(
-                #             ft.Icons.SWITCH_ACCESS_SHORTCUT,
-                #             color=ft.Colors.WHITE
-                #         ),
-                #         bgcolor=ft.Colors.BLACK_26,
-                #         height=30,
-                #         width=30,
-                #         border_radius=30,
-                #         margin=ft.Margin.only(top=5),
-                #         on_click=alternar_visao
-                #     )
-                # ]),
-
                 area_novo_dado,
 
                 ft.Row(
