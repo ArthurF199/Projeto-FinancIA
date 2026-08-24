@@ -474,7 +474,7 @@ def Main(page: ft.Page):
         padding=10
     )
 
-    tela_central.controls[1].content=planilha if is_visao_dados else tela_informacoes
+    tela_central.content.controls[1].content=planilha if is_visao_dados else tela_informacoes
     # ==========================================
     # 3. COLUNA DIREITA (Chat)
     # ==========================================
