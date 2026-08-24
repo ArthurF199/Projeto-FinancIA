@@ -204,7 +204,7 @@ def Main(page: ft.Page):
             
             # Botão com visual mais moderno
             botao("Salário", ft.Icons.ATTACH_MONEY, mostrar_campo_insercao),
-            botao("Analisar Planilha", ft.Icons.ANALYTICS, analise),
+            botao("Relatório", ft.Icons.ANALYTICS, analise),
             botao("Reserva de Emergência", ft.Icons.SAVINGS, reserva_emergencia),
             botao("Viver de Renda", ft.Icons.SAVINGS, viver_renda),
         ],
