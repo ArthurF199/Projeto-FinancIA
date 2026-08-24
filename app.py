@@ -138,30 +138,11 @@ def Main(page: ft.Page):
     # ==========================================
     # 1. COLUNA ESQUERDA (Botões)
     # ==========================================
-    def analise(e):
-        prompt = f"""Analise o dataframe: {df}.
-        Esse dataframe apenas indica meus gastos, considere que eu não tenho controle sobre o dataframe, eu não consigo adicionar ou alterar as categorias, eu apenas dito os meus gastos.
-        Me diga se estou fazendo um bom gerenciamento do meu dinheiro e me dê sugestões do que eu deveria fazer em relação ao meu financeiro.
-        Lembre-se de responder de forma curta e resumida.
-        """
-        mensagem_ia = ft.Text("Sistema: Analisando dados...", color=ft.Colors.GREEN, size=fonte+5)
-        lista_mensagens.controls.append(mensagem_ia)
-        page.update()
+    def relatorio(e):
+        nonlocal df
 
-        def processar_ia():
-            try:
-                resposta = Gemma4(prompt, stream=True)
-                mensagem_ia.value = f"Sistema: "
-                page.update()
-                for token in resposta:
-                    mensagem_ia.value += token
-                    page.update()
-            except Exception as e:
-                mensagem_ia.value = f'Sistema: Erro ao analisar {e}'
-                mensagem_ia.color = ft.Colors.RED
-                page.update()
 
-        threading.Thread(target=processar_ia, daemon=True).start()
+
 
     def hover_botao(e):
         e.control.scale = 1.1 if e.data == True else 1.0
@@ -226,7 +207,14 @@ def Main(page: ft.Page):
     df = pd.DataFrame(df).fillna('')  # Preenche valores nulos com string vazia
 
     tabela_financeira = ft.DataTable(columns=[], rows=[], column_spacing=105)
-    tela_central = None
+    tela_central = ft.Container(
+        ft.Column([
+            ft.Text("Teste"),
+            ft.Container()
+        ]),
+        expand=5
+    )
+
     is_visao_dados = True
     visualizacao_atual = [
         "Data do registro",
@@ -270,7 +258,7 @@ def Main(page: ft.Page):
         
         # Se a tela de informações estiver visível, atualiza ela
         # if tela_informacoes:
-        #     tela_informacoes.update()flet run app.py --web
+        #     tela_informacoes.update()
 
     def alternar_visao(e):
         nonlocal is_visao_dados
@@ -321,21 +309,21 @@ def Main(page: ft.Page):
     planilha = ft.Container(
         content=ft.Column(
             controls=[
-                ft.Row([
-                    ft.Text("Planilha Financeira", size=fonte+15, weight="bold", color=ft.Colors.WHITE),
-                    ft.Container(
-                        content=ft.Icon(
-                            ft.Icons.SWITCH_ACCESS_SHORTCUT,
-                            color=ft.Colors.WHITE
-                        ),
-                        bgcolor=ft.Colors.BLACK_26,
-                        height=30,
-                        width=30,
-                        border_radius=30,
-                        margin=ft.Margin.only(top=5),
-                        on_click=alternar_visao
-                    )
-                ]),
+                # ft.Row([
+                #     ft.Text("Planilha Financeira", size=fonte+15, weight="bold", color=ft.Colors.WHITE),
+                #     ft.Container(
+                #         content=ft.Icon(
+                #             ft.Icons.SWITCH_ACCESS_SHORTCUT,
+                #             color=ft.Colors.WHITE
+                #         ),
+                #         bgcolor=ft.Colors.BLACK_26,
+                #         height=30,
+                #         width=30,
+                #         border_radius=30,
+                #         margin=ft.Margin.only(top=5),
+                #         on_click=alternar_visao
+                #     )
+                # ]),
 
                 area_novo_dado,
 
@@ -486,10 +474,7 @@ def Main(page: ft.Page):
         padding=10
     )
 
-    tela_central = ft.Container(
-       content=planilha, # Inicia mostrando a planilha
-       expand=5          # Mantém a mesma proporção de tela que você configurou
-    )
+    tela_central.controls[1].content=planilha if is_visao_dados else tela_informacoes
     # ==========================================
     # 3. COLUNA DIREITA (Chat)
     # ==========================================
