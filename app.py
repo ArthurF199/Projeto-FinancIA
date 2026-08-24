@@ -221,7 +221,7 @@ def Main(page: ft.Page):
                     width=30,
                     border_radius=30,
                     margin=ft.Margin.only(top=5),
-                    on_click=alternar_visao
+                    on_click=None
                 )
             ]),
             ft.Container()
