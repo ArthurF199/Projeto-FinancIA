@@ -594,7 +594,7 @@ def Main(page: ft.Page):
 
 if __name__ == "__main__":
     ft.run(Main, view=ft.AppView.WEB_BROWSER,
-           host="127.0.0.1",
+           host="0.0.0.0",
            port=8550)
 
 # ADICIONAR GRÁFICO
