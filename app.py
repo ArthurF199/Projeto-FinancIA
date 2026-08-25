@@ -140,8 +140,11 @@ def Main(page: ft.Page):
     # ==========================================
     def relatorio(e):
         nonlocal df
+        tela_central.content.controls[0].content=tela_relatorio
 
-
+    tela_relatorio=ft.Container(
+        ft.Text()
+    )
 
 
     def hover_botao(e):
@@ -207,26 +210,47 @@ def Main(page: ft.Page):
     df = pd.DataFrame(df).fillna('')  # Preenche valores nulos com string vazia
 
     tabela_financeira = ft.DataTable(columns=[], rows=[], column_spacing=105)
+
+    def alternar_visao(e):
+        nonlocal is_visao_dados
+        # Não precisa do nonlocal tela_central se vamos apenas alterar uma propriedade dela
+
+        is_visao_dados = not is_visao_dados
+
+        if is_visao_dados:
+            recarregar_tabela()
+            tela_central.content.controls[1].controls[0].content = planilha
+            tela_central.content.controls[0].controls[0].value = "Planilha Financeira"
+        else:
+            atualizar_informacoes()
+            tela_central.content.controls[1].controls[0].content = tela_informacoes
+            tela_central.content.controls[0].controls[0].value = "Informações"
+
+        # Atualiza o container que segura as telas
+        tela_central.update() 
+
     tela_central = ft.Container(
         ft.Column([
             ft.Row([
-                ft.Text("Planilha Financeira", size=fonte+15, weight="bold", color=ft.Colors.WHITE),
+                ft.Text("", size=fonte+15, weight="bold", color=ft.Colors.WHITE),
                 ft.Container(
                     content=ft.Icon(
                         ft.Icons.SWITCH_ACCESS_SHORTCUT,
-                        color=ft.Colors.WHITE
+                        color=ft.Colors.WHITE,
                     ),
                     bgcolor=ft.Colors.BLACK_26,
                     height=30,
                     width=30,
                     border_radius=30,
                     margin=ft.Margin.only(top=5),
-                    on_click=None
+                    on_click=alternar_visao
                 )
             ]),
-            ft.Container()
+            ft.Column([
+                ft.Container(expand=True)
+            ], expand=True)
         ]),
-        expand=5
+        expand=5,
     )
 
     is_visao_dados = True
@@ -289,8 +313,7 @@ def Main(page: ft.Page):
 
         # Atualiza o container que segura as telas
         tela_central.update() 
-        
-        print(is_visao_dados)
+
 
     def recarregar_tabela():
         tabela = tabela_financeira
@@ -342,21 +365,6 @@ def Main(page: ft.Page):
     tela_informacoes = ft.Container(
         content=ft.Column(
             controls=[
-                ft.Row([
-                    ft.Text("Informações", size=fonte+15, weight="bold", color=ft.Colors.WHITE),
-                    ft.Container(
-                        content=ft.Icon(
-                            ft.Icons.SWITCH_ACCESS_SHORTCUT,
-                            color=ft.Colors.WHITE
-                        ),
-                        bgcolor=ft.Colors.BLACK_26,
-                        height=30,
-                        width=30,
-                        border_radius=30,
-                        margin=ft.Margin.only(top=5),
-                        on_click=alternar_visao
-                    )
-                ]),
                 ft.Row([
                     ft.Column([
                         ft.Container(
@@ -472,7 +480,7 @@ def Main(page: ft.Page):
         padding=10
     )
 
-    tela_central.content.controls[1].content=planilha if is_visao_dados else tela_informacoes
+    tela_central.content.controls[1].content=tela_relatorio
     # ==========================================
     # 3. COLUNA DIREITA (Chat)
     # ==========================================
