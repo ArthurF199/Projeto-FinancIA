@@ -155,47 +155,120 @@ def Main(page: ft.Page):
 
     def botao(texto, icone, ao_clicar):
         return ft.Container(
-            content=ft.Column(
-                controls=[
-                    ft.Icon(icone, color=ft.Colors.WHITE),
-                    ft.Text(texto, size=fonte+5, weight="bold", color=ft.Colors.WHITE, expand=True, no_wrap=True),
-                ],
-                horizontal_alignment=ft.MainAxisAlignment.CENTER,
-
+            gradient=ft.LinearGradient(
+                colors=[ft.Colors.BLACK38, ft.Colors.WHITE12]
             ),
-            width=270,
-            height=110,
-            bgcolor=ft.Colors.BLUE_700,
-            border_radius=8,
-            padding=10,
-            ink=True,  # Mantém o efeito visual de clique do botão
-            on_click=ao_clicar,
+            padding=3,
+            border_radius=18,
             on_hover=hover_botao,
-            scale=1.0,  # Aceita o número direto nas versões recentes
             animate=ft.Animation(500, ft.AnimationCurve.EASE_OUT),
             animate_scale=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
+
+            content=ft.Container(
+                content=ft.Row(
+                    controls=[
+                        ft.Column(
+                            ft.Icon(icone, color=ft.Colors.WHITE, size=50),
+                            alignment=ft.CrossAxisAlignment.CENTER,
+                        ),
+
+                        ft.Text(texto, size=fonte+5+1, weight="bold", color=ft.Colors.WHITE, expand=True, no_wrap=True),
+                    ],
+                    vertical_alignment=ft.MainAxisAlignment.CENTER,
+                ),
+                width=375,
+                height=110,
+                bgcolor=ft.Colors.BLACK38,
+                border_radius=16,
+                padding=20,
+                ink=True,  # Mantém o efeito visual de clique do botão
+                on_click=ao_clicar,
+                scale=1.0,  # Aceita o número direto nas versões recentes
+
+            )
         )
+
 
     coluna_botoes = ft.Container(
     content=ft.Column(
         controls=[
             ft.Container(
-                ft.Text("Menu Principal", size=20, weight="bold", color=ft.Colors.WHITE),
-                alignment=ft.Alignment.CENTER,
-                padding=ft.Padding.only(top=25)
+                ft.Row([
+                    ft.Container(
+                        ft.Icon(ft.CupertinoIcons.CHART_BAR_ALT_FILL, size=50, color=ft.Colors.with_opacity(0.95, ft.Colors.WHITE)),
+                        bgcolor=ft.Colors.BLACK_26,
+                        border_radius=15,
+                        padding=ft.Padding.only(left=7, right=5, top=5, bottom=9)
+                    ),
+                    ft.Column([
+                        ft.Text("FinancIA", weight="bold", size=35, color=ft.Colors.WHITE),
+                        ft.Text("Seu controle financeiro", size=17, color=ft.Colors.with_opacity(0.80, ft.Colors.WHITE)),
+                    ], spacing=-5)
+                ])
             ),
-            ft.Divider(color=ft.Colors.WHITE24), # Linha divisória sutil
+
+            ft.Divider(color=ft.Colors.WHITE_12), # Linha divisória sutil
             
+            ft.Container(
+                ft.Text("MENU PRINCIPAL",
+                        size=17,
+                        weight="W_300",
+                        color=ft.Colors.with_opacity(0.75, ft.Colors.WHITE24)),
+                alignment=ft.Alignment.CENTER_LEFT,
+                padding=ft.Padding.only(left=5),
+                margin=ft.Margin.only(top=10),
+                height=20
+            ),
+
             # Botão com visual mais moderno
+
             botao("Salário", ft.Icons.ATTACH_MONEY, mostrar_campo_insercao),
             botao("Relatório", ft.Icons.ANALYTICS, relatorio),
-            botao("Reserva de Emergência", ft.Icons.SAVINGS, reserva_emergencia),
+            botao("Reserva de Emergência", ft.Icons.SHIELD, reserva_emergencia),
             botao("Viver de Renda", ft.Icons.SAVINGS, viver_renda),
+            
+
+            ft.Container(
+                ft.Container(
+                    ft.Row([
+                        ft.Container(
+                            ft.Icon(ft.Icons.AUTO_AWESOME, size=60),
+                            bgcolor=ft.Colors.with_opacity(0.20, ft.Colors.BLACK),
+                            padding=5,
+                            border_radius=15,
+                        ),
+                        ft.Column([
+                            ft.Text("Organize hoje,", size=17, color=ft.Colors.WHITE, weight="bold"),
+                            ft.Text("conquiste amanhã.", size=17, color=ft.Colors.WHITE)
+                        ], alignment=ft.MainAxisAlignment.CENTER, spacing=0)
+                    ]),
+
+                    bgcolor=ft.Colors.BLACK26,
+
+                    width=375,
+                    height=150,
+                    padding=20,
+                    border_radius=15,
+                ),
+                bgcolor=ft.Colors.BLACK12,
+                gradient=ft.LinearGradient(
+                        colors=[ft.Colors.WHITE, ft.Colors.BLACK],
+                        begin=ft.Alignment.CENTER_LEFT,
+                        end=ft.Alignment(0.75, 0.5),
+                        rotation=3.14 / 2.55
+                    ),
+                padding=2,
+                width=375,
+                height=150,
+                border_radius=15,
+                margin=ft.Margin.only(top=50)
+
+            )
+            
         ],
-        spacing=30,
         scroll=ft.ScrollMode.ADAPTIVE
     ),
-    width=300, # Largura fixa para o menu
+    width=375, # Largura fixa para o menu
     padding=20,
     bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE), # Fundo levemente translúcido
     border_radius=15,
@@ -480,7 +553,7 @@ def Main(page: ft.Page):
         padding=10
     )
 
-    tela_central.content.controls[1].content=tela_relatorio
+    tela_central.content.controls[1].content=planilha
     # ==========================================
     # 3. COLUNA DIREITA (Chat)
     # ==========================================
@@ -575,6 +648,7 @@ def Main(page: ft.Page):
                 ft.Row([campo_mensagem, botao_enviar]) # Fica na base do chat
             ],
         ),
+        width=375,
         expand=2, # Ocupa 2 partes do espaço
         padding=10,
         # bgcolor=ft.Colors.SURFACE_VARIANT,
