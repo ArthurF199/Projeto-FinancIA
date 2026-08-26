@@ -664,9 +664,9 @@ def Main(page: ft.Page):
     layout_principal = ft.Row(
         controls=[
             coluna_botoes,
-            ft.VerticalDivider(width=1), # Uma linha vertical separando
+            # ft.VerticalDivider(width=1), # Uma linha vertical separando
             tela_central,
-            ft.VerticalDivider(width=1),
+            # ft.VerticalDivider(width=1),
             coluna_chat
         ],
         expand=True # Faz a linha ocupar 100% da altura da tela
