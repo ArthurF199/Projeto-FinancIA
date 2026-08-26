@@ -324,7 +324,7 @@ def Main(page: ft.Page):
             ], expand=True)
         ]),
         expand=5,
-        bgcolor=ft.Colors.BLACK26,
+        bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
         border_radius=15,
         padding=10
     )
