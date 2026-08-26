@@ -346,23 +346,32 @@ def Main(page: ft.Page):
 
     # Crie as variáveis para os textos que vão mudar
     texto_salario = ft.Text(f"R$ {df.loc[0, 'Salário']:.2f}",
-                            size=fonte+5,
+                            size=fonte+20,
                             color=ft.Colors.WHITE,
-                            text_align=ft.TextAlign.CENTER)
+                            text_align=ft.TextAlign.CENTER,
+                            margin=ft.Margin.only(top=10, bottom=8),
+                            weight="bold")
     
     texto_reserva = ft.Text(f"R$ {df.loc[0, 'Reserva de Emergência']:.2f}",
-                            size=fonte+5,
+                            size=fonte+20,
                             color=ft.Colors.WHITE,
-                            text_align=ft.TextAlign.CENTER)
+                            text_align=ft.TextAlign.CENTER,
+                            margin=ft.Margin.only(top=10, bottom=8),
+                            weight="bold")
     
     texto_renda = ft.Text(f"R$ {df.loc[0, 'Viver de Renda']:.2f}",
-                          size=fonte+5, color=ft.Colors.WHITE,
-                          text_align=ft.TextAlign.CENTER)
+                            size=fonte+20,
+                            color=ft.Colors.WHITE,
+                            text_align=ft.TextAlign.CENTER,
+                            margin=ft.Margin.only(top=10, bottom=8),
+                            weight="bold")
     
     texto_aporte = ft.Text(f"R$ {df.loc[0, 'Aporte Mensal']:.2f}",
-                           size=fonte+5,
-                           color=ft.Colors.WHITE,
-                           text_align=ft.TextAlign.CENTER)
+                            size=fonte+20,
+                            color=ft.Colors.WHITE,
+                            text_align=ft.TextAlign.CENTER,
+                            margin=ft.Margin.only(top=10, bottom=8),
+                            weight="bold")
 
     def atualizar_informacoes():
         # ATENÇÃO: Se o arquivo do Excel mudou no computador, 
@@ -486,118 +495,116 @@ def Main(page: ft.Page):
         content=ft.Column(
             controls=[
                 ft.Row([
-                    ft.Column([
-                        ft.Container(
+                    ft.Container(
+                        ft.Row([
+                            ft.Container(
+                                ft.Icon(ft.Icons.WALLET, size=50),
+                                bgcolor=ft.Colors.with_opacity(0.3, ft.Colors.BLACK),
+                                border_radius=20,
+                                padding=15,
+                                margin=ft.Margin.only(right=10)
+                            ),
+
                             ft.Column([
-                                ft.Row(
-                                    ft.Text("Salário",
-                                            size=fonte+10,
-                                            weight="bold",
-                                            color=ft.Colors.WHITE),
-                                    alignment=ft.MainAxisAlignment.CENTER
-                                ),
-                                ft.Container(
-                                    texto_salario,
-                                    bgcolor=ft.Colors.BLACK26,
-                                    border_radius=25,
-                                    width=300,
-                                    height=75,
-                                    padding=20,
-                                ),
-                            ]),
-                            bgcolor=ft.Colors.BLACK12,
-                            border_radius=25,
-                            height=150,
-                            width=300,
-                            padding=ft.Padding.all(10),
-                        )
-                    ]),
-                    ft.Column([
-                        ft.Container(
+                                ft.Text("Salário", color=ft.Colors.with_opacity(0.75, ft.Colors.WHITE), size=18),
+                                texto_salario,
+                                ft.Text("Receita Principal", color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE))
+                            ], spacing=-10, alignment=ft.CrossAxisAlignment.CENTER)
+                        ]),
+                        bgcolor=ft.Colors.BLACK26,
+                        border_radius=15,
+                        padding=20,
+                        height=135,
+                        expand=True
+                    ),
+                    ft.Container(
+                        ft.Row([
+                            ft.Container(
+                                ft.Icon(ft.Icons.SHIELD, size=50),
+                                bgcolor=ft.Colors.with_opacity(0.3, ft.Colors.BLACK),
+                                border_radius=20,
+                                padding=15,
+                                margin=ft.Margin.only(right=10)
+                            ),
+
                             ft.Column([
-                                ft.Row(
-                                    ft.Text("Reserva de Emergência",
-                                            size=fonte+10,
-                                            weight="bold",
-                                            color=ft.Colors.WHITE),
-                                    alignment=ft.MainAxisAlignment.CENTER
-                                ),
-                                ft.Container(
-                                    texto_reserva,
-                                    bgcolor=ft.Colors.BLACK26,
-                                    border_radius=25,
-                                    width=300,
-                                    height=75,
-                                    padding=20,
-                                ),
-                            ]),
-                            bgcolor=ft.Colors.BLACK12,
-                            border_radius=25,
-                            height=150,
-                            width=300,
-                            padding=ft.Padding.all(10),
-                        )
-                    ])
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                ft.Text("Reserva de Emergência", color=ft.Colors.with_opacity(0.75, ft.Colors.WHITE), size=18),
+                                texto_reserva,
+                                ft.Text("6 meses de segurança", color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE))
+                            ], spacing=-10, alignment=ft.CrossAxisAlignment.CENTER)
+                        ]),
+                        bgcolor=ft.Colors.BLACK26,
+                        border_radius=15,
+                        padding=20,
+                        height=135,
+                        expand=True
+                    ),
+                ]),
                 ft.Row([
-                    ft.Column([
-                        ft.Container(
+                    ft.Container(
+                        ft.Row([
+                            ft.Container(
+                                ft.Icon(ft.Icons.SAVINGS, size=50),
+                                bgcolor=ft.Colors.with_opacity(0.3, ft.Colors.BLACK),
+                                border_radius=20,
+                                padding=15,
+                                margin=ft.Margin.only(right=10)
+                            ),
+
                             ft.Column([
-                                ft.Row(
-                                    ft.Text("Viver de Renda",
-                                            size=fonte+10,
-                                            weight="bold",
-                                            color=ft.Colors.WHITE),
-                                    alignment=ft.MainAxisAlignment.CENTER
-                                ),
-                                ft.Container(
-                                    texto_renda,
-                                    bgcolor=ft.Colors.BLACK26,
-                                    border_radius=25,
-                                    width=300,
-                                    height=75,
-                                    padding=20,
-                                ),
-                            ]),
-                            bgcolor=ft.Colors.BLACK12,
-                            border_radius=25,
-                            height=150,
-                            width=300,
-                            padding=ft.Padding.all(10),
-                        )
-                    ]),
-                    ft.Column([
-                        ft.Container(
+                                ft.Text("Viver de Renda", color=ft.Colors.with_opacity(0.75, ft.Colors.WHITE), size=18),
+                                texto_renda,
+                                ft.Text("Meta de Patrimônio", color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE))
+                            ], spacing=-10, alignment=ft.CrossAxisAlignment.CENTER)
+                        ]),
+                        bgcolor=ft.Colors.BLACK26,
+                        border_radius=15,
+                        padding=20,
+                        height=135,
+                        expand=True
+                    ),
+                    ft.Container(
+                        ft.Row([
+                            ft.Container(
+                                ft.Icon(ft.Icons.SHOW_CHART, size=50),
+                                bgcolor=ft.Colors.with_opacity(0.3, ft.Colors.BLACK),
+                                border_radius=20,
+                                padding=15,
+                                margin=ft.Margin.only(right=10)
+                            ),
+
                             ft.Column([
-                                ft.Row(
-                                    ft.Text("Aporte Mensal",
-                                            size=fonte+10,
-                                            weight="bold",
-                                            color=ft.Colors.WHITE),
-                                    alignment=ft.MainAxisAlignment.CENTER
-                                ),
-                                ft.Container(
-                                    texto_aporte,
-                                    bgcolor=ft.Colors.BLACK26,
-                                    border_radius=25,
-                                    width=300,
-                                    height=75,
-                                    padding=20,
-                                ),
-                            ]),
-                            bgcolor=ft.Colors.BLACK12,
-                            border_radius=25,
-                            height=150,
-                            width=300,
-                            padding=ft.Padding.all(10),
-                        )
+                                ft.Text("Aporte Mensal", color=ft.Colors.with_opacity(0.75, ft.Colors.WHITE), size=18),
+                                texto_aporte,
+                                ft.Text("Investimento mensal", color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE))
+                            ], spacing=-10, alignment=ft.CrossAxisAlignment.CENTER)
+                        ]),
+                        bgcolor=ft.Colors.BLACK26,
+                        border_radius=15,
+                        padding=20,
+                        height=135,
+                        expand=True
+                    ),
+                ]),
+
+                ft.Container(
+                    ft.Column([
+                        ft.Row([
+                            ft.Icon(ft.Icons.DASHBOARD, size=25),
+                            ft.Text("Resumo Geral", color=ft.Colors.WHITE, weight="bold", size=25),
+                        ]),
+                        ft.Row([
+
+                        ])
                     ]),
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
-            ],
-            expand=True
-        ),
-        expand=5,
-        padding=10
+
+                    bgcolor=ft.Colors.BLACK26,
+                    border_radius=15,
+                    padding=20,
+                    height=150,
+                )
+            ]
+        )
     )
 
     
