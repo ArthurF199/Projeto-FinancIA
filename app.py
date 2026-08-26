@@ -284,6 +284,10 @@ def Main(page: ft.Page):
 
     tabela_financeira = ft.DataTable(columns=[], rows=[], column_spacing=105)
 
+    is_visao_dados = True
+
+    area_dinamica = ft.Container(expand=True)
+
     def alternar_visao(e):
         nonlocal is_visao_dados
         # Não precisa do nonlocal tela_central se vamos apenas alterar uma propriedade dela
@@ -292,11 +296,11 @@ def Main(page: ft.Page):
 
         if is_visao_dados:
             recarregar_tabela()
-            tela_central.content.controls[1].controls[0].content = planilha
+            area_dinamica.content = planilha
             tela_central.content.controls[0].controls[0].value = "Planilha Financeira"
         else:
             atualizar_informacoes()
-            tela_central.content.controls[1].controls[0].content = tela_informacoes
+            area_dinamica.content = tela_informacoes
             tela_central.content.controls[0].controls[0].value = "Informações"
 
         # Atualiza o container que segura as telas
@@ -308,19 +312,21 @@ def Main(page: ft.Page):
                 ft.Text("", size=fonte+15, weight="bold", color=ft.Colors.WHITE),
                 ft.Container(
                     content=ft.Icon(
-                        ft.Icons.SWITCH_ACCESS_SHORTCUT,
-                        color=ft.Colors.WHITE,
+                        ft.Icons.SYNC,
+                        color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE),
                     ),
-                    bgcolor=ft.Colors.BLACK_26,
+                    # bgcolor=ft.Colors.BLACK_26,
                     height=30,
                     width=30,
                     border_radius=30,
                     margin=ft.Margin.only(top=5),
-                    on_click=alternar_visao
-                )
-            ]),
+                    on_click=alternar_visao,
+                ),
+            ],
+            margin=20),
+
             ft.Column([
-                ft.Container(expand=True)
+                area_dinamica
             ], expand=True)
         ]),
         expand=5,
@@ -329,7 +335,7 @@ def Main(page: ft.Page):
         padding=10
     )
 
-    is_visao_dados = True
+
     visualizacao_atual = [
         "Data do registro",
         "Descrição",
@@ -403,21 +409,57 @@ def Main(page: ft.Page):
                 cabecalho = ft.Container(
                     content=ft.Text(coluna, weight="bold", size=fonte+5, color=ft.Colors.ON_SURFACE),
                 )
-                tabela.columns.append(ft.DataColumn(ft.Container(cabecalho), bgcolor=ft.Colors.BLACK26))
+                tabela.columns.append(ft.DataColumn(ft.Container(cabecalho)))
 
         # 2. Preenche as linhas buscando os valores apenas dessas colunas
         for indice, linha in df.iterrows():
             linhas_celulas = []
+            
+            # Descobre o "Tipo" da linha ATUAL antes de preencher as colunas
+            # Usamos o .get() para evitar erro caso a coluna 'Tipo' não exista ou esteja vazia
+            tipo_da_linha = str(linha.get('Tipo', '')).strip()
+            
             for coluna in visualizacao_atual:
                 if coluna in df.columns:
                     valor = linha[coluna] # Pega o valor específico daquela coluna
+                    
                     if isinstance(valor, (int, float)):
-                        linhas_celulas.append(ft.DataCell(ft.Text("R$ "+f"{valor:.2f}", color=ft.Colors.WHITE)))
-                    else:
-                        linhas_celulas.append(ft.DataCell(ft.Text(str(valor), color=ft.Colors.WHITE)))
+                        # Aplica a regra de cores baseada na variável tipo_da_linha
+                        if tipo_da_linha == "Saída":
+                            cor_texto = ft.Colors.GREEN
+                        elif tipo_da_linha == "Entrada":
+                            cor_texto = ft.Colors.BLUE
+                        else:
+                            cor_texto = ft.Colors.WHITE # Cor padrão para prevenir erros
+                            
+                        linhas_celulas.append(ft.DataCell(ft.Text("R$ "+f"{valor:.2f}", color=cor_texto, weight="W_600")))
 
-            
+                    else:
+                        if coluna == "Tipo" and tipo_da_linha == "Saída":
+                            linhas_celulas.append(ft.DataCell(
+                                ft.Container(
+                                    content=ft.Text(str(valor), color=ft.Colors.RED, weight="bold"),
+                                    bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.RED),
+                                    border_radius=10,
+                                    padding=ft.Padding.only(left=10, right=10, top=5, bottom=5)
+                                )
+                            ))
+                        elif coluna == "Tipo" and tipo_da_linha == "Entrada":
+                            linhas_celulas.append(ft.DataCell(
+                                ft.Container(
+                                    content=ft.Text(str(valor), color=ft.Colors.GREEN, weight="bold"),
+                                    bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.GREEN),
+                                    border_radius=10,
+                                    padding=ft.Padding.only(left=10, right=10, top=5, bottom=5)
+                                )
+                            ))
+                        else:
+                            linhas_celulas.append(ft.DataCell(ft.Text(str(valor), color=ft.Colors.WHITE, weight="W_600")))
+
+ 
             tabela.rows.append(ft.DataRow(cells=linhas_celulas))
+            
+        page.update() # Atualiza a tela após inserir tudo
 
     planilha = ft.Container(
         content=ft.Column(
@@ -433,7 +475,9 @@ def Main(page: ft.Page):
             expand=True
         ),
         expand=5, # Ocupa 3 partes do espaço
-        padding=10
+        padding=ft.Padding.only(left=10, right=10),
+        bgcolor=ft.Colors.BLACK26,
+        border_radius=15
     )
 
     recarregar_tabela()
@@ -556,7 +600,8 @@ def Main(page: ft.Page):
         padding=10
     )
 
-    tela_central.content.controls[1].content=planilha
+    
+
     # ==========================================
     # 3. COLUNA DIREITA (Chat)
     # ==========================================
