@@ -401,7 +401,8 @@ def Main(page: ft.Page):
             # É bom checar se a coluna existe no df para evitar erros caso a planilha mude
             if coluna in df.columns:
                 cabecalho = ft.Container(
-                    content=ft.Text(coluna, weight="bold", size=fonte+5, color=ft.Colors.ON_SURFACE)
+                    content=ft.Text(coluna, weight="bold", size=fonte+5, color=ft.Colors.ON_SURFACE),
+                    bgcolor=ft.Colors.BLACK26
                 )
                 tabela.columns.append(ft.DataColumn(cabecalho))
 
