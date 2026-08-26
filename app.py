@@ -402,9 +402,8 @@ def Main(page: ft.Page):
             if coluna in df.columns:
                 cabecalho = ft.Container(
                     content=ft.Text(coluna, weight="bold", size=fonte+5, color=ft.Colors.ON_SURFACE),
-                    bgcolor=ft.Colors.BLACK26
                 )
-                tabela.columns.append(ft.DataColumn(cabecalho))
+                tabela.columns.append(ft.DataColumn(ft.Container(cabecalho), bgcolor=ft.Colors.BLACK26))
 
         # 2. Preenche as linhas buscando os valores apenas dessas colunas
         for indice, linha in df.iterrows():
