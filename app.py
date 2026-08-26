@@ -324,6 +324,8 @@ def Main(page: ft.Page):
             ], expand=True)
         ]),
         expand=5,
+        bgcolor=ft.Colors.BLACK,
+        border_radius=15
     )
 
     is_visao_dados = True
