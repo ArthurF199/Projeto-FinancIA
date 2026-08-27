@@ -652,7 +652,7 @@ def Main(page: ft.Page):
                         ],spacing=30,
                         margin=ft.Margin.only(left=32, right=32),
                         height=100,
-                        scroll=ft.ScrollBar(
+                        scroll=ft.Scrollbar(
                             thumb_visibility=True,
                             thickness=4.0 if page.platform.is_mobile() and not page.web else None
                         ),
