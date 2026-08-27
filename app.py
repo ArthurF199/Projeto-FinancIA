@@ -654,7 +654,7 @@ def Main(page: ft.Page):
                         height=100,
                         scroll=ft.Scrollbar(
                             thumb_visibility=True,
-                            thickness=4.0 if page.platform.is_mobile() and not page.web else None
+                            thickness=10.0
                         ),
                         alignment=ft.MainAxisAlignment.CENTER)
                     ]),
