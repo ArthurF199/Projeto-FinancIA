@@ -54,7 +54,7 @@ def Main(page: ft.Page):
                 # Opcional: Salva no Excel para não perder
                 # Nota: Não precisa de df = df.fillna('') aqui se quiser manter a integridade, 
                 # mas mantive como no seu original.
-                df.fillna('', inplace=True) 
+                # df.fillna('', inplace=True) 
                 df.to_excel(dataxlsx, index=False)
                 
                 # Recarrega a tabela visual
