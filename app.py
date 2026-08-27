@@ -407,6 +407,8 @@ def Main(page: ft.Page):
 
 
     def recarregar_tabela():
+        entradas = 0
+        despesas = 0
         tabela = tabela_financeira
         tabela.columns.clear()
         tabela.rows.clear()
@@ -436,8 +438,10 @@ def Main(page: ft.Page):
                         # Aplica a regra de cores baseada na variável tipo_da_linha
                         if tipo_da_linha == "Saída":
                             cor_texto = ft.Colors.GREEN
+                            despesas+=valor
                         elif tipo_da_linha == "Entrada":
                             cor_texto = ft.Colors.BLUE
+                            entradas+=valor
                         else:
                             cor_texto = ft.Colors.WHITE # Cor padrão para prevenir erros
                             
@@ -467,7 +471,8 @@ def Main(page: ft.Page):
 
  
             tabela.rows.append(ft.DataRow(cells=linhas_celulas))
-            
+            df.loc[0, 'Entradas'] = entradas
+            df.loc[0, 'Despesas'] = despesas            
         page.update() # Atualiza a tela após inserir tudo
 
     planilha = ft.Container(
@@ -594,8 +599,61 @@ def Main(page: ft.Page):
                             ft.Text("Resumo Geral", color=ft.Colors.WHITE, weight="bold", size=25),
                         ]),
                         ft.Row([
+                            ft.Column([
+                                ft.Text("Receitas (mês)", color=ft.Colors.BLUE, weight="bold", size=20),
+                                ft.Text(f"R$ {df.loc[0, 'Salário']+df.loc[0, 'Entradas']:.2f}",
+                                    size=25,
+                                    color=ft.Colors.WHITE,
+                                    text_align=ft.TextAlign.CENTER,
+                                    margin=ft.Margin.only(top=10, bottom=8),
+                                    weight="bold"
+                                )
+                            ], spacing=-10),
 
-                        ])
+                            ft.VerticalDivider(),
+
+                            ft.Column([
+                                ft.Text("Despesas (mês)", color=ft.Colors.RED, weight="bold", size=20),
+                                ft.Text(f"R$ {df.loc[0, 'Despesas']:.2f}",
+                                    size=25,
+                                    color=ft.Colors.WHITE,
+                                    text_align=ft.TextAlign.CENTER,
+                                    margin=ft.Margin.only(top=10, bottom=8),
+                                    weight="bold"
+                                )
+                            ], spacing=-10),
+
+                            ft.VerticalDivider(),
+
+                            ft.Column([
+                                ft.Text("Investimentos (mês)", color=ft.Colors.GREEN, weight="bold", size=20),
+                                ft.Text(f"R$ {df.loc[0, 'Aporte Mensal']:.2f}",
+                                    size=25,
+                                    color=ft.Colors.WHITE,
+                                    text_align=ft.TextAlign.CENTER,
+                                    margin=ft.Margin.only(top=10, bottom=8),
+                                    weight="bold"
+                                )
+                            ], spacing=-10),
+
+                            ft.VerticalDivider(width=1),
+
+                            ft.Column([
+                                ft.Text("Saldo (mês)", color=ft.Colors.BLUE, weight="bold", size=20),
+                                ft.Text(f"R$ {df.loc[0, 'Salário']+df.loc[0, 'Entradas']-df.loc[0, 'Despesas']:.2f}",
+                                    size=25,
+                                    color=ft.Colors.WHITE if df.loc[0, 'Salário']+df.loc[0, 'Entradas']-df.loc[0, 'Despesas'] > 0 else ft.Colors.RED,
+                                    text_align=ft.TextAlign.CENTER,
+                                    margin=ft.Margin.only(top=10, bottom=8),
+                                    weight="bold"
+                                )
+                            ], spacing=-10),
+
+                        ],spacing=60,
+                        margin=ft.Margin.only(left=32, right=32),
+                        height=100,
+                        scroll=ft.ScrollMode.ADAPTIVE,
+                        alignment=ft.MainAxisAlignment.CENTER)
                     ]),
 
                     bgcolor=ft.Colors.BLACK26,
@@ -633,7 +691,11 @@ def Main(page: ft.Page):
                     wrap=True
                 )
         return row, texto_control
-    campo_mensagem = ft.TextField(hint_text="Digite...", expand=True, color=ft.Colors.ON_SURFACE)
+    campo_mensagem = ft.TextField(hint_text="Digite...",
+                                  expand=True,
+                                  color=ft.Colors.WHITE,
+                                  bgcolor=ft.Colors.BLACK38,
+                                  border_radius=15)
     # Lembra da nossa regra da função com evento 'e'? Aqui está ela em ação!
     def enviar_mensagem(e):
         if campo_mensagem.value != "":
@@ -691,14 +753,21 @@ def Main(page: ft.Page):
 
     
     # O botão de enviar dispara a função acima
-    botao_enviar = ft.IconButton(icon=ft.Icons.SEND, on_click=enviar_mensagem)
+    botao_enviar = ft.Container(
+        content=ft.IconButton(icon=ft.Icons.SEND, on_click=enviar_mensagem, icon_size=35),
+        bgcolor=ft.Colors.BLACK26,
+        border_radius=180,
+    )
     # Apertar "Enter" no campo de texto também envia
     campo_mensagem.on_submit = enviar_mensagem
 
     coluna_chat = ft.Container(
         content=ft.Column(
             controls=[
-                ft.Text("FinancIA", size=fonte+10, weight="bold", color=ft.Colors.ON_SURFACE),
+                ft.Row([
+                    ft.Text("FinancIA", size=fonte+15, weight="bold", color=ft.Colors.ON_SURFACE),
+                    ft.Icon(ft.Icons.AUTO_AWESOME, size=35)
+                ], margin=20),
                 lista_mensagens, # Ocupa o meio do chat
                 ft.Row([campo_mensagem, botao_enviar]) # Fica na base do chat
             ],
@@ -706,7 +775,7 @@ def Main(page: ft.Page):
         width=375,
         expand=2, # Ocupa 2 partes do espaço
         padding=10,
-        # bgcolor=ft.Colors.SURFACE_VARIANT,
+        bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
         border_radius=10,
     )
 
