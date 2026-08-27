@@ -472,8 +472,9 @@ def Main(page: ft.Page):
 
  
             tabela.rows.append(ft.DataRow(cells=linhas_celulas))
-            df.loc[0, 'Entradas'] = entradas
-            df.loc[0, 'Despesas'] = despesas            
+            
+        df.loc[0, 'Entradas'] = entradas
+        df.loc[0, 'Despesas'] = despesas            
         page.update() # Atualiza a tela após inserir tudo
 
     planilha = ft.Container(
