@@ -649,7 +649,7 @@ def Main(page: ft.Page):
                                 )
                             ], spacing=-10),
 
-                        ],spacing=30,
+                        ],spacing=0,
                         margin=ft.Margin.only(left=32, right=32),
                         height=100,
                         scroll=ft.ScrollMode.ADAPTIVE,
