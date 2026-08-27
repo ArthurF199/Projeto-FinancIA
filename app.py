@@ -396,11 +396,12 @@ def Main(page: ft.Page):
         is_visao_dados = not is_visao_dados
 
         if is_visao_dados:
-            recarregar_tabela()
             tela_central.content = planilha
         else:
-            atualizar_informacoes()
             tela_central.content = tela_informacoes
+
+        atualizar_informacoes()
+        recarregar_tabela()
 
         # Atualiza o container que segura as telas
         tela_central.update() 
