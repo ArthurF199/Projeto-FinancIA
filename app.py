@@ -649,10 +649,13 @@ def Main(page: ft.Page):
                                 )
                             ], spacing=-10),
 
-                        ],spacing=0,
+                        ],spacing=30,
                         margin=ft.Margin.only(left=32, right=32),
                         height=100,
-                        scroll=ft.ScrollMode.ADAPTIVE,
+                        scroll=ft.ScrollBar(
+                            thumb_visibility=True,
+                            thickness=4.0 if page.platform.is_mobile() and not page.web else None
+                        ),
                         alignment=ft.MainAxisAlignment.CENTER)
                     ]),
 
