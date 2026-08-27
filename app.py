@@ -284,6 +284,10 @@ def Main(page: ft.Page):
 
     tabela_financeira = ft.DataTable(columns=[], rows=[], column_spacing=105)
 
+    is_visao_dados = True
+
+    area_dinamica = ft.Container(expand=True)
+
     def alternar_visao(e):
         nonlocal is_visao_dados
         # Não precisa do nonlocal tela_central se vamos apenas alterar uma propriedade dela
@@ -292,11 +296,11 @@ def Main(page: ft.Page):
 
         if is_visao_dados:
             recarregar_tabela()
-            tela_central.content.controls[1].controls[0].content = planilha
+            area_dinamica.content = planilha
             tela_central.content.controls[0].controls[0].value = "Planilha Financeira"
         else:
             atualizar_informacoes()
-            tela_central.content.controls[1].controls[0].content = tela_informacoes
+            area_dinamica.content = tela_informacoes
             tela_central.content.controls[0].controls[0].value = "Informações"
 
         # Atualiza o container que segura as telas
@@ -308,19 +312,21 @@ def Main(page: ft.Page):
                 ft.Text("", size=fonte+15, weight="bold", color=ft.Colors.WHITE),
                 ft.Container(
                     content=ft.Icon(
-                        ft.Icons.SWITCH_ACCESS_SHORTCUT,
-                        color=ft.Colors.WHITE,
+                        ft.Icons.SYNC,
+                        color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE),
                     ),
-                    bgcolor=ft.Colors.BLACK_26,
+                    # bgcolor=ft.Colors.BLACK_26,
                     height=30,
                     width=30,
                     border_radius=30,
                     margin=ft.Margin.only(top=5),
-                    on_click=alternar_visao
-                )
-            ]),
+                    on_click=alternar_visao,
+                ),
+            ],
+            margin=20),
+
             ft.Column([
-                ft.Container(expand=True)
+                area_dinamica
             ], expand=True)
         ]),
         expand=5,
@@ -329,7 +335,7 @@ def Main(page: ft.Page):
         padding=10
     )
 
-    is_visao_dados = True
+
     visualizacao_atual = [
         "Data do registro",
         "Descrição",
@@ -340,23 +346,32 @@ def Main(page: ft.Page):
 
     # Crie as variáveis para os textos que vão mudar
     texto_salario = ft.Text(f"R$ {df.loc[0, 'Salário']:.2f}",
-                            size=fonte+5,
+                            size=fonte+20,
                             color=ft.Colors.WHITE,
-                            text_align=ft.TextAlign.CENTER)
+                            text_align=ft.TextAlign.CENTER,
+                            margin=ft.Margin.only(top=10, bottom=8),
+                            weight="bold")
     
     texto_reserva = ft.Text(f"R$ {df.loc[0, 'Reserva de Emergência']:.2f}",
-                            size=fonte+5,
+                            size=fonte+20,
                             color=ft.Colors.WHITE,
-                            text_align=ft.TextAlign.CENTER)
+                            text_align=ft.TextAlign.CENTER,
+                            margin=ft.Margin.only(top=10, bottom=8),
+                            weight="bold")
     
     texto_renda = ft.Text(f"R$ {df.loc[0, 'Viver de Renda']:.2f}",
-                          size=fonte+5, color=ft.Colors.WHITE,
-                          text_align=ft.TextAlign.CENTER)
+                            size=fonte+20,
+                            color=ft.Colors.WHITE,
+                            text_align=ft.TextAlign.CENTER,
+                            margin=ft.Margin.only(top=10, bottom=8),
+                            weight="bold")
     
     texto_aporte = ft.Text(f"R$ {df.loc[0, 'Aporte Mensal']:.2f}",
-                           size=fonte+5,
-                           color=ft.Colors.WHITE,
-                           text_align=ft.TextAlign.CENTER)
+                            size=fonte+20,
+                            color=ft.Colors.WHITE,
+                            text_align=ft.TextAlign.CENTER,
+                            margin=ft.Margin.only(top=10, bottom=8),
+                            weight="bold")
 
     def atualizar_informacoes():
         # ATENÇÃO: Se o arquivo do Excel mudou no computador, 
@@ -392,6 +407,8 @@ def Main(page: ft.Page):
 
 
     def recarregar_tabela():
+        entradas = 0
+        despesas = 0
         tabela = tabela_financeira
         tabela.columns.clear()
         tabela.rows.clear()
@@ -402,23 +419,61 @@ def Main(page: ft.Page):
             if coluna in df.columns:
                 cabecalho = ft.Container(
                     content=ft.Text(coluna, weight="bold", size=fonte+5, color=ft.Colors.ON_SURFACE),
-                    bgcolor=ft.Colors.BLACK26
                 )
-                tabela.columns.append(ft.DataColumn(cabecalho))
+                tabela.columns.append(ft.DataColumn(ft.Container(cabecalho)))
 
         # 2. Preenche as linhas buscando os valores apenas dessas colunas
         for indice, linha in df.iterrows():
             linhas_celulas = []
+            
+            # Descobre o "Tipo" da linha ATUAL antes de preencher as colunas
+            # Usamos o .get() para evitar erro caso a coluna 'Tipo' não exista ou esteja vazia
+            tipo_da_linha = str(linha.get('Tipo', '')).strip()
+            
             for coluna in visualizacao_atual:
                 if coluna in df.columns:
                     valor = linha[coluna] # Pega o valor específico daquela coluna
+                    
                     if isinstance(valor, (int, float)):
-                        linhas_celulas.append(ft.DataCell(ft.Text("R$ "+f"{valor:.2f}", color=ft.Colors.WHITE)))
-                    else:
-                        linhas_celulas.append(ft.DataCell(ft.Text(str(valor), color=ft.Colors.WHITE)))
+                        # Aplica a regra de cores baseada na variável tipo_da_linha
+                        if tipo_da_linha == "Saída":
+                            cor_texto = ft.Colors.GREEN
+                            despesas+=valor
+                        elif tipo_da_linha == "Entrada":
+                            cor_texto = ft.Colors.BLUE
+                            entradas+=valor
+                        else:
+                            cor_texto = ft.Colors.WHITE # Cor padrão para prevenir erros
+                            
+                        linhas_celulas.append(ft.DataCell(ft.Text("R$ "+f"{valor:.2f}", color=cor_texto, weight="W_600")))
 
-            
+                    else:
+                        if coluna == "Tipo" and tipo_da_linha == "Saída":
+                            linhas_celulas.append(ft.DataCell(
+                                ft.Container(
+                                    content=ft.Text(str(valor), color=ft.Colors.RED, weight="bold"),
+                                    bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.RED),
+                                    border_radius=10,
+                                    padding=ft.Padding.only(left=10, right=10, top=5, bottom=5)
+                                )
+                            ))
+                        elif coluna == "Tipo" and tipo_da_linha == "Entrada":
+                            linhas_celulas.append(ft.DataCell(
+                                ft.Container(
+                                    content=ft.Text(str(valor), color=ft.Colors.GREEN, weight="bold"),
+                                    bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.GREEN),
+                                    border_radius=10,
+                                    padding=ft.Padding.only(left=10, right=10, top=5, bottom=5)
+                                )
+                            ))
+                        else:
+                            linhas_celulas.append(ft.DataCell(ft.Text(str(valor), color=ft.Colors.WHITE, weight="W_600")))
+
+ 
             tabela.rows.append(ft.DataRow(cells=linhas_celulas))
+            df.loc[0, 'Entradas'] = entradas
+            df.loc[0, 'Despesas'] = despesas            
+        page.update() # Atualiza a tela após inserir tudo
 
     planilha = ft.Container(
         content=ft.Column(
@@ -434,7 +489,9 @@ def Main(page: ft.Page):
             expand=True
         ),
         expand=5, # Ocupa 3 partes do espaço
-        padding=10
+        padding=ft.Padding.only(left=10, right=10),
+        bgcolor=ft.Colors.BLACK26,
+        border_radius=15
     )
 
     recarregar_tabela()
@@ -443,121 +500,173 @@ def Main(page: ft.Page):
         content=ft.Column(
             controls=[
                 ft.Row([
-                    ft.Column([
-                        ft.Container(
+                    ft.Container(
+                        ft.Row([
+                            ft.Container(
+                                ft.Icon(ft.Icons.WALLET, size=50),
+                                bgcolor=ft.Colors.with_opacity(0.3, ft.Colors.BLACK),
+                                border_radius=20,
+                                padding=15,
+                                margin=ft.Margin.only(right=10)
+                            ),
+
                             ft.Column([
-                                ft.Row(
-                                    ft.Text("Salário",
-                                            size=fonte+10,
-                                            weight="bold",
-                                            color=ft.Colors.WHITE),
-                                    alignment=ft.MainAxisAlignment.CENTER
-                                ),
-                                ft.Container(
-                                    texto_salario,
-                                    bgcolor=ft.Colors.BLACK26,
-                                    border_radius=25,
-                                    width=300,
-                                    height=75,
-                                    padding=20,
-                                ),
-                            ]),
-                            bgcolor=ft.Colors.BLACK12,
-                            border_radius=25,
-                            height=150,
-                            width=300,
-                            padding=ft.Padding.all(10),
-                        )
-                    ]),
-                    ft.Column([
-                        ft.Container(
+                                ft.Text("Salário", color=ft.Colors.with_opacity(0.75, ft.Colors.WHITE), size=18),
+                                texto_salario,
+                                ft.Text("Receita Principal", color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE))
+                            ], spacing=-10, alignment=ft.CrossAxisAlignment.CENTER)
+                        ]),
+                        bgcolor=ft.Colors.BLACK26,
+                        border_radius=15,
+                        padding=20,
+                        height=135,
+                        expand=True
+                    ),
+                    ft.Container(
+                        ft.Row([
+                            ft.Container(
+                                ft.Icon(ft.Icons.SHIELD, size=50),
+                                bgcolor=ft.Colors.with_opacity(0.3, ft.Colors.BLACK),
+                                border_radius=20,
+                                padding=15,
+                                margin=ft.Margin.only(right=10)
+                            ),
+
                             ft.Column([
-                                ft.Row(
-                                    ft.Text("Reserva de Emergência",
-                                            size=fonte+10,
-                                            weight="bold",
-                                            color=ft.Colors.WHITE),
-                                    alignment=ft.MainAxisAlignment.CENTER
-                                ),
-                                ft.Container(
-                                    texto_reserva,
-                                    bgcolor=ft.Colors.BLACK26,
-                                    border_radius=25,
-                                    width=300,
-                                    height=75,
-                                    padding=20,
-                                ),
-                            ]),
-                            bgcolor=ft.Colors.BLACK12,
-                            border_radius=25,
-                            height=150,
-                            width=300,
-                            padding=ft.Padding.all(10),
-                        )
-                    ])
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                ft.Text("Reserva de Emergência", color=ft.Colors.with_opacity(0.75, ft.Colors.WHITE), size=18),
+                                texto_reserva,
+                                ft.Text("6 meses de segurança", color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE))
+                            ], spacing=-10, alignment=ft.CrossAxisAlignment.CENTER)
+                        ]),
+                        bgcolor=ft.Colors.BLACK26,
+                        border_radius=15,
+                        padding=20,
+                        height=135,
+                        expand=True
+                    ),
+                ]),
                 ft.Row([
-                    ft.Column([
-                        ft.Container(
+                    ft.Container(
+                        ft.Row([
+                            ft.Container(
+                                ft.Icon(ft.Icons.SAVINGS, size=50),
+                                bgcolor=ft.Colors.with_opacity(0.3, ft.Colors.BLACK),
+                                border_radius=20,
+                                padding=15,
+                                margin=ft.Margin.only(right=10)
+                            ),
+
                             ft.Column([
-                                ft.Row(
-                                    ft.Text("Viver de Renda",
-                                            size=fonte+10,
-                                            weight="bold",
-                                            color=ft.Colors.WHITE),
-                                    alignment=ft.MainAxisAlignment.CENTER
-                                ),
-                                ft.Container(
-                                    texto_renda,
-                                    bgcolor=ft.Colors.BLACK26,
-                                    border_radius=25,
-                                    width=300,
-                                    height=75,
-                                    padding=20,
-                                ),
-                            ]),
-                            bgcolor=ft.Colors.BLACK12,
-                            border_radius=25,
-                            height=150,
-                            width=300,
-                            padding=ft.Padding.all(10),
-                        )
-                    ]),
-                    ft.Column([
-                        ft.Container(
+                                ft.Text("Viver de Renda", color=ft.Colors.with_opacity(0.75, ft.Colors.WHITE), size=18),
+                                texto_renda,
+                                ft.Text("Meta de Patrimônio", color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE))
+                            ], spacing=-10, alignment=ft.CrossAxisAlignment.CENTER)
+                        ]),
+                        bgcolor=ft.Colors.BLACK26,
+                        border_radius=15,
+                        padding=20,
+                        height=135,
+                        expand=True
+                    ),
+                    ft.Container(
+                        ft.Row([
+                            ft.Container(
+                                ft.Icon(ft.Icons.SHOW_CHART, size=50),
+                                bgcolor=ft.Colors.with_opacity(0.3, ft.Colors.BLACK),
+                                border_radius=20,
+                                padding=15,
+                                margin=ft.Margin.only(right=10)
+                            ),
+
                             ft.Column([
-                                ft.Row(
-                                    ft.Text("Aporte Mensal",
-                                            size=fonte+10,
-                                            weight="bold",
-                                            color=ft.Colors.WHITE),
-                                    alignment=ft.MainAxisAlignment.CENTER
-                                ),
-                                ft.Container(
-                                    texto_aporte,
-                                    bgcolor=ft.Colors.BLACK26,
-                                    border_radius=25,
-                                    width=300,
-                                    height=75,
-                                    padding=20,
-                                ),
-                            ]),
-                            bgcolor=ft.Colors.BLACK12,
-                            border_radius=25,
-                            height=150,
-                            width=300,
-                            padding=ft.Padding.all(10),
-                        )
+                                ft.Text("Aporte Mensal", color=ft.Colors.with_opacity(0.75, ft.Colors.WHITE), size=18),
+                                texto_aporte,
+                                ft.Text("Investimento mensal", color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE))
+                            ], spacing=-10, alignment=ft.CrossAxisAlignment.CENTER)
+                        ]),
+                        bgcolor=ft.Colors.BLACK26,
+                        border_radius=15,
+                        padding=20,
+                        height=135,
+                        expand=True
+                    ),
+                ]),
+
+                ft.Container(
+                    ft.Column([
+                        ft.Row([
+                            ft.Icon(ft.Icons.DASHBOARD, size=25),
+                            ft.Text("Resumo Geral", color=ft.Colors.WHITE, weight="bold", size=25),
+                        ]),
+                        ft.Row([
+                            ft.Column([
+                                ft.Text("Receitas (mês)", color=ft.Colors.BLUE, weight="bold", size=20),
+                                ft.Text(f"R$ {df.loc[0, 'Salário']+df.loc[0, 'Entradas']:.2f}",
+                                    size=25,
+                                    color=ft.Colors.WHITE,
+                                    text_align=ft.TextAlign.CENTER,
+                                    margin=ft.Margin.only(top=10, bottom=8),
+                                    weight="bold"
+                                )
+                            ], spacing=-10),
+
+                            ft.VerticalDivider(),
+
+                            ft.Column([
+                                ft.Text("Despesas (mês)", color=ft.Colors.RED, weight="bold", size=20),
+                                ft.Text(f"R$ {df.loc[0, 'Despesas']:.2f}",
+                                    size=25,
+                                    color=ft.Colors.WHITE,
+                                    text_align=ft.TextAlign.CENTER,
+                                    margin=ft.Margin.only(top=10, bottom=8),
+                                    weight="bold"
+                                )
+                            ], spacing=-10),
+
+                            ft.VerticalDivider(),
+
+                            ft.Column([
+                                ft.Text("Investimentos (mês)", color=ft.Colors.GREEN, weight="bold", size=20),
+                                ft.Text(f"R$ {df.loc[0, 'Aporte Mensal']:.2f}",
+                                    size=25,
+                                    color=ft.Colors.WHITE,
+                                    text_align=ft.TextAlign.CENTER,
+                                    margin=ft.Margin.only(top=10, bottom=8),
+                                    weight="bold"
+                                )
+                            ], spacing=-10),
+
+                            ft.VerticalDivider(width=1),
+
+                            ft.Column([
+                                ft.Text("Saldo (mês)", color=ft.Colors.BLUE, weight="bold", size=20),
+                                ft.Text(f"R$ {df.loc[0, 'Salário']+df.loc[0, 'Entradas']-df.loc[0, 'Despesas']:.2f}",
+                                    size=25,
+                                    color=ft.Colors.WHITE if df.loc[0, 'Salário']+df.loc[0, 'Entradas']-df.loc[0, 'Despesas'] > 0 else ft.Colors.RED,
+                                    text_align=ft.TextAlign.CENTER,
+                                    margin=ft.Margin.only(top=10, bottom=8),
+                                    weight="bold"
+                                )
+                            ], spacing=-10),
+
+                        ],spacing=60,
+                        margin=ft.Margin.only(left=32, right=32),
+                        height=100,
+                        scroll=ft.ScrollMode.ADAPTIVE,
+                        alignment=ft.MainAxisAlignment.CENTER)
                     ]),
-                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
-            ],
-            expand=True
-        ),
-        expand=5,
-        padding=10
+
+                    bgcolor=ft.Colors.BLACK26,
+                    border_radius=15,
+                    padding=20,
+                    height=150,
+                )
+            ]
+        )
     )
 
-    tela_central.content.controls[1].content=planilha
+    
+
     # ==========================================
     # 3. COLUNA DIREITA (Chat)
     # ==========================================
@@ -582,7 +691,11 @@ def Main(page: ft.Page):
                     wrap=True
                 )
         return row, texto_control
-    campo_mensagem = ft.TextField(hint_text="Digite...", expand=True, color=ft.Colors.ON_SURFACE)
+    campo_mensagem = ft.TextField(hint_text="Digite...",
+                                  expand=True,
+                                  color=ft.Colors.WHITE,
+                                  bgcolor=ft.Colors.BLACK38,
+                                  border_radius=15)
     # Lembra da nossa regra da função com evento 'e'? Aqui está ela em ação!
     def enviar_mensagem(e):
         if campo_mensagem.value != "":
@@ -640,14 +753,21 @@ def Main(page: ft.Page):
 
     
     # O botão de enviar dispara a função acima
-    botao_enviar = ft.IconButton(icon=ft.Icons.SEND, on_click=enviar_mensagem)
+    botao_enviar = ft.Container(
+        content=ft.IconButton(icon=ft.Icons.SEND, on_click=enviar_mensagem, icon_size=35),
+        bgcolor=ft.Colors.BLACK26,
+        border_radius=180,
+    )
     # Apertar "Enter" no campo de texto também envia
     campo_mensagem.on_submit = enviar_mensagem
 
     coluna_chat = ft.Container(
         content=ft.Column(
             controls=[
-                ft.Text("FinancIA", size=fonte+10, weight="bold", color=ft.Colors.ON_SURFACE),
+                ft.Row([
+                    ft.Text("FinancIA", size=fonte+15, weight="bold", color=ft.Colors.ON_SURFACE),
+                    ft.Icon(ft.Icons.AUTO_AWESOME, size=35)
+                ], margin=20),
                 lista_mensagens, # Ocupa o meio do chat
                 ft.Row([campo_mensagem, botao_enviar]) # Fica na base do chat
             ],
@@ -655,7 +775,7 @@ def Main(page: ft.Page):
         width=375,
         expand=2, # Ocupa 2 partes do espaço
         padding=10,
-        # bgcolor=ft.Colors.SURFACE_VARIANT,
+        bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
         border_radius=10,
     )
 
