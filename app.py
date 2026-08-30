@@ -373,6 +373,34 @@ def Main(page: ft.Page):
                             margin=ft.Margin.only(top=10, bottom=8),
                             weight="bold")
 
+    texto_receitas = ft.Text(f"R$ {df.loc[0, 'Salário']+df.loc[0, 'Entradas']:.2f}",
+                                        size=25,
+                                        color=ft.Colors.WHITE,
+                                        text_align=ft.TextAlign.CENTER,
+                                        margin=ft.Margin.only(top=10, bottom=8),
+                                        weight="bold",
+                                        no_wrap=True)
+
+    texto_despesas = ft.Text(f"R$ {df.loc[0, 'Despesas']:.2f}",
+                                    size=25,
+                                    color=ft.Colors.WHITE,
+                                    text_align=ft.TextAlign.CENTER,
+                                    margin=ft.Margin.only(top=10, bottom=8),
+                                    weight="bold")
+
+    texto_investimentos = ft.Text(f"R$ {df.loc[0, 'Aporte Mensal']:.2f}",
+                                    size=25,
+                                    color=ft.Colors.WHITE,
+                                    text_align=ft.TextAlign.CENTER,
+                                    margin=ft.Margin.only(top=10, bottom=8),
+                                    weight="bold")
+
+    texto_saldo = ft.Text(f"R$ {df.loc[0, 'Salário']+df.loc[0, 'Entradas']-df.loc[0, 'Despesas']:.2f}",
+                                    size=25,
+                                    color=ft.Colors.WHITE if (df.loc[0, 'Salário']+df.loc[0, 'Entradas']-df.loc[0, 'Despesas']-df.loc[0, 'Aporte Mensal']) > 0 else ft.Colors.RED,
+                                    text_align=ft.TextAlign.CENTER,
+                                    margin=ft.Margin.only(top=10, bottom=8),
+                                    weight="bold")
     def atualizar_informacoes():
         # ATENÇÃO: Se o arquivo do Excel mudou no computador, 
         # você precisa ler ele de novo descomentando a linha abaixo:
@@ -384,10 +412,17 @@ def Main(page: ft.Page):
         texto_reserva.value = f"R$ {df.loc[0, 'Reserva de Emergência']:.2f}"
         texto_renda.value = f"R$ {df.loc[0, 'Viver de Renda']:.2f}"
         texto_aporte.value = f"R$ {df.loc[0, 'Aporte Mensal']:.2f}"
+
+        texto_receitas.value = f"R$ {df.loc[0, 'Salário']+df.loc[0, 'Entradas']:.2f}"
+        texto_despesas.value = f"R$ {df.loc[0, 'Despesas']:.2f}"
+        texto_investimentos.value = f"R$ {df.loc[0, 'Aporte Mensal']:.2f}"
+        texto_saldo.value = f"R$ {df.loc[0, 'Salário']+df.loc[0, 'Entradas']-df.loc[0, 'Despesas']-df.loc[0, 'Aporte Mensal']:.2f}"
+        texto_saldo.color = ft.Colors.WHITE if (df.loc[0, 'Salário']+df.loc[0, 'Entradas']-df.loc[0, 'Despesas']-df.loc[0, 'Aporte Mensal']) > 0 else ft.Colors.RED
+
+
+        if tela_informacoes:
+            tela_central.update()
         
-        # Se a tela de informações estiver visível, atualiza ela
-        # if tela_informacoes:
-        #     tela_informacoes.update()
 
     def alternar_visao(e):
         nonlocal is_visao_dados
@@ -474,7 +509,8 @@ def Main(page: ft.Page):
             tabela.rows.append(ft.DataRow(cells=linhas_celulas))
             
         df.loc[0, 'Entradas'] = entradas
-        df.loc[0, 'Despesas'] = despesas            
+        df.loc[0, 'Despesas'] = despesas
+        df.to_excel("data.xlsx")
         page.update() # Atualiza a tela após inserir tudo
 
     planilha = ft.Container(
@@ -595,82 +631,87 @@ def Main(page: ft.Page):
                 ]),
 
                 ft.Container(
-                    ft.Column([
-                        ft.Row([
-                            ft.Icon(ft.Icons.DASHBOARD, size=25),
-                            ft.Text("Resumo Geral", color=ft.Colors.WHITE, weight="bold", size=25),
-                        ]),
-                        ft.Row([
-                            ft.Column([
-                                ft.Text("Receitas (mês)", color=ft.Colors.BLUE, weight="bold", size=20),
-                                ft.Text(f"R$ {df.loc[0, 'Salário']+df.loc[0, 'Entradas']:.2f}",
-                                    size=25,
-                                    color=ft.Colors.WHITE,
-                                    text_align=ft.TextAlign.CENTER,
-                                    margin=ft.Margin.only(top=10, bottom=8),
-                                    weight="bold"
-                                )
-                            ], spacing=-10),
-
-                            ft.VerticalDivider(),
-
-                            ft.Column([
-                                ft.Text("Despesas (mês)", color=ft.Colors.RED, weight="bold", size=20),
-                                ft.Text(f"R$ {df.loc[0, 'Despesas']:.2f}",
-                                    size=25,
-                                    color=ft.Colors.WHITE,
-                                    text_align=ft.TextAlign.CENTER,
-                                    margin=ft.Margin.only(top=10, bottom=8),
-                                    weight="bold"
-                                )
-                            ], spacing=-10),
-
-                            ft.VerticalDivider(),
-
-                            ft.Column([
-                                ft.Text("Investimentos (mês)", color=ft.Colors.GREEN, weight="bold", size=20),
-                                ft.Text(f"R$ {df.loc[0, 'Aporte Mensal']:.2f}",
-                                    size=25,
-                                    color=ft.Colors.WHITE,
-                                    text_align=ft.TextAlign.CENTER,
-                                    margin=ft.Margin.only(top=10, bottom=8),
-                                    weight="bold"
-                                )
-                            ], spacing=-10),
-
-                            ft.VerticalDivider(width=1),
-
-                            ft.Column([
-                                ft.Text("Saldo (mês)", color=ft.Colors.BLUE, weight="bold", size=20),
-                                ft.Text(f"R$ {df.loc[0, 'Salário']+df.loc[0, 'Entradas']-df.loc[0, 'Despesas']:.2f}",
-                                    size=25,
-                                    color=ft.Colors.WHITE if df.loc[0, 'Salário']+df.loc[0, 'Entradas']-df.loc[0, 'Despesas'] > 0 else ft.Colors.RED,
-                                    text_align=ft.TextAlign.CENTER,
-                                    margin=ft.Margin.only(top=10, bottom=8),
-                                    weight="bold"
-                                )
-                            ], spacing=-10),
-
-                        ],spacing=30,
-                        margin=ft.Margin.only(left=32, right=32),
-                        height=100,
-                        scroll=ft.Scrollbar(
-                            thumb_visibility=True,
-                            thickness=10.0
-                        ),
-                        alignment=ft.MainAxisAlignment.CENTER)
-                    ]),
-
                     bgcolor=ft.Colors.BLACK26,
                     border_radius=15,
                     padding=20,
-                    height=150,
+                    content=ft.Column([
+                        ft.Row([
+                            ft.Icon(ft.Icons.DASHBOARD, size=30),
+                            ft.Text("Resumo Geral", color=ft.Colors.WHITE, weight="bold", size=25),
+                        ]),
+                        # ft.Container(height=10), 
+
+                        ft.Container(
+                            width=float("inf"),
+                            content=ft.Row(
+                                expand=True,
+                                wrap=True,           # 1. Permite que os blocos pulem de linha
+                                spacing=30,          # 2. Espaço horizontal entre os blocos
+                                run_spacing=20,      # 3. Espaço vertical quando um bloco pular para a linha de baixo
+                                alignment=ft.MainAxisAlignment.CENTER,
+                                controls=[
+                                    ft.Container(bgcolor=ft.Colors.WHITE12, height=80, width=1),
+
+                                    # Bloco de Receitas
+                                    ft.Container(
+                                        width=180, # 4. Largura fixa garante que o texto dentro não seja esmagado
+                                        content=ft.Column([
+                                            ft.Text("Receitas (mês)", color=ft.Colors.BLUE, weight="bold", size=19, no_wrap=True),
+                                            texto_receitas
+                                        ], spacing=-10)
+                                    ),
+
+                                    ft.Container(bgcolor=ft.Colors.WHITE12, height=80, width=1),
+
+                                    # Bloco de Despesas
+                                    ft.Container(
+                                        width=180,
+                                        content=ft.Column([
+                                            ft.Text("Despesas (mês)", color=ft.Colors.RED, weight="bold", size=19, no_wrap=True),
+                                            texto_despesas
+                                        ], spacing=-10)
+                                    ),
+
+                                    ft.Container(bgcolor=ft.Colors.WHITE12, height=80, width=1),
+
+                                    # Bloco de Investimentos
+                                    ft.Container(
+                                        width=180,
+                                        content=ft.Column([
+                                            ft.Text("Investimentos (mês)", color=ft.Colors.GREEN, weight="bold", size=19, no_wrap=True),
+                                            texto_investimentos
+                                        ], spacing=-10)
+                                    ),
+
+                                    ft.Container(bgcolor=ft.Colors.WHITE12, height=80, width=1),
+
+                                    # Bloco de Saldo
+                                    ft.Container(
+                                        width=180,
+                                        content=ft.Column([
+                                            ft.Text("Saldo (mês)", color=ft.Colors.BLUE, weight="bold", size=19, no_wrap=True),
+                                            texto_saldo
+                                        ], spacing=-10)
+                                    ),
+
+                                    ft.Container(bgcolor=ft.Colors.WHITE12, height=80, width=1),
+                                ]
+                            )
+                        )  
+                    ])
+                ),
+
+                ft.Row(
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    controls=[
+                        ft.Container(bgcolor=ft.Colors.BLACK, height=300, expand=5, border_radius=15),
+                        ft.Container(bgcolor=ft.Colors.BLACK, height=300, expand=6, border_radius=15)
+                    ]
                 )
             ]
         )
     )
 
-    
 
     # ==========================================
     # 3. COLUNA DIREITA (Chat)
