@@ -536,6 +536,7 @@ def Main(page: ft.Page):
 
     tela_informacoes = ft.Container(
         content=ft.Column(
+            scroll=ft.ScrollMode.ALWAYS,
             controls=[
                 ft.Row([
                     ft.Container(
