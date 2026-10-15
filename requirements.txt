@@ -1,0 +1,6 @@
+flet==1.0.4
+flet-charts==1.0.4
+pandas
+openpyxl
+requests
+python-dotenv

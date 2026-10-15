@@ -1,15 +1,36 @@
 import flet as ft
+import flet_charts as fch
 import pandas as pd
 from ia import *
-from main import registerData
+from main import registerData, carregar_planilha, numero
 import os
 import threading
 from time import sleep
+from datetime import datetime
+
+
+TIPOS_DESPESA = ["Saída", "Conta"]
+NOMES_MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
+CORES_PIZZA = [
+    ft.Colors.RED_400,
+    ft.Colors.ORANGE_400,
+    ft.Colors.AMBER_400,
+    ft.Colors.PURPLE_300,
+    ft.Colors.CYAN_400,
+    ft.Colors.BLUE_GREY_400,
+]
+
+
+def moeda(valor: float) -> str:
+    # Formato brasileiro: R$ 1.234,56
+    return "R$ " + f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
 def Main(page: ft.Page):
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     dataxlsx = os.path.join(BASE_DIR, "data.xlsx")
+
+    df = carregar_planilha(dataxlsx)
 
     fullscreen = False
     def full_screen():
@@ -35,47 +56,91 @@ def Main(page: ft.Page):
 
 
     # ==========================================
+    # FUNÇÕES DE DADOS
+    # ==========================================
+    def salvar_planilha(dados: pd.DataFrame):
+        try:
+            dados.to_excel(dataxlsx, index=False)
+        except PermissionError:
+            raise PermissionError("Feche o data.xlsx no Excel para que o FinancIA consiga salvar.")
+
+    def registros():
+        # Apenas as linhas que são transações de verdade, com colunas auxiliares já convertidas
+        tabela = df[df["Descrição"].astype(str).str.strip() != ""].copy()
+        tabela["_data"] = pd.to_datetime(tabela["Data do registro"], format="%d/%m/%Y", errors="coerce")
+        tabela["_valor"] = tabela["Valor"].apply(numero)
+        tabela["_tipo"] = tabela["Tipo"].astype(str).str.strip()
+        return tabela
+
+    def registros_do_mes(tabela, ano, mes):
+        return tabela[(tabela["_data"].dt.year == ano) & (tabela["_data"].dt.month == mes)]
+
+    def calcular_resumo():
+        hoje = datetime.now()
+        do_mes = registros_do_mes(registros(), hoje.year, hoje.month)
+
+        salario = numero(df.loc[0, "Salário"])
+        entradas = do_mes.loc[do_mes["_tipo"] == "Entrada", "_valor"].sum()
+        despesas = do_mes.loc[do_mes["_tipo"].isin(TIPOS_DESPESA), "_valor"].sum()
+        aporte = numero(df.loc[0, "Aporte Mensal"])
+        receitas = salario + entradas
+
+        return {
+            "salario": salario,
+            "reserva": numero(df.loc[0, "Reserva de Emergência"]),
+            "renda": numero(df.loc[0, "Viver de Renda"]),
+            "aporte": aporte,
+            "receitas": receitas,
+            "despesas": despesas,
+            "saldo": receitas - despesas - aporte,
+        }
+
+    def calcular_metas():
+        # Reserva = 6 salários, Viver de Renda = 120 salários, Aporte = 20% do salário
+        salario = numero(df.loc[0, "Salário"])
+        df.loc[0, "Reserva de Emergência"] = salario * 6
+        df.loc[0, "Viver de Renda"] = salario * 120
+        df.loc[0, "Aporte Mensal"] = round(salario * 0.2, 2)
+
+
+    # ==========================================
     # LÓGICA DE INSERÇÃO MANUAL DE DADOS
     # ==========================================
     # 1. Container que vai guardar o campo de texto (começa vazio)
     def salario(e):
-        nonlocal df # Garante que estamos mexendo no df principal
-        
-        valor = campo_input.value
-        
+        valor = campo_input.value.strip()
+
         if valor != "":
             try:
-                # Substitui vírgula por ponto (para aceitar 1500,00) e converte para float
-                valor_convertido = float(valor.replace(',', '.'))
-                
-                # Atualiza o DataFrame
-                df.loc[0, 'Salário'] = valor_convertido
+                # Aceita "1500", "1500,00" e "1.500,00"
+                if "," in valor:
+                    valor = valor.replace(".", "").replace(",", ".")
+                valor_convertido = float(valor.replace("R$", "").strip())
 
-                # Opcional: Salva no Excel para não perder
-                # Nota: Não precisa de df = df.fillna('') aqui se quiser manter a integridade, 
-                # mas mantive como no seu original.
-                # df.fillna('', inplace=True) 
-                df.to_excel(dataxlsx, index=False)
-                
-                # Recarrega a tabela visual
+                df.loc[0, "Salário"] = valor_convertido
+                calcular_metas()
+                salvar_planilha(df)
+
                 recarregar_tabela()
-                
+                atualizar_informacoes()
+
                 # Limpa o campo e esconde a área de input
                 campo_input.value = ""
-                campo_input.error_text = None # Limpa possíveis erros anteriores
-                fechar_campo() # Você já tem essa função abaixo, pode reaproveitá-la!
-                
+                campo_input.error_text = None
+                fechar_campo()
+
             except ValueError:
                 # Se o usuário digitar letras (ex: "abc"), vai cair aqui
                 campo_input.error_text = "Digite um número válido"
                 page.update()
+            except PermissionError as erro:
+                campo_input.error_text = str(erro)
+                page.update()
 
-    area_novo_dado = ft.Container() 
+    area_novo_dado = ft.Container()
 
     # 2. Criamos os componentes de input
     campo_input = ft.TextField(label="Digite o seu salário", expand=True, color=ft.Colors.ON_SURFACE, on_submit=salario)
-    
-
 
     botao_salvar = ft.IconButton(icon=ft.Icons.CHECK, icon_color=ft.Colors.GREEN, on_click=salario)
     botao_cancelar = ft.IconButton(icon=ft.Icons.CANCEL, icon_color=ft.Colors.RED, on_click=lambda e: fechar_campo())
@@ -86,7 +151,8 @@ def Main(page: ft.Page):
 
     # 3. Função que o botão principal chama para mostrar o campo na tela
     def mostrar_campo_insercao(e):
-        # Coloca o TextField e os botões dentro da área que estava vazia
+        # O campo fica acima da tabela, então garante que a planilha está visível
+        mostrar_visao("planilha")
         area_novo_dado.content = ft.Row(
             controls=[
                 campo_input,
@@ -97,54 +163,40 @@ def Main(page: ft.Page):
         page.update()
         campo_input.focus() # Já coloca o cursor piscando no campo
 
-    def reserva_emergencia(e):
-        nonlocal df
-        salario = df.loc[0, 'Salário']
-        if salario != '':
-            df.loc[0, 'Reserva de Emergência'] = salario * 6
-            df.fillna('')
-            df.to_excel(dataxlsx, index=False)
-
-            recarregar_tabela()
-            atualizar_informacoes()
-
-            page.update()
-        else:
-            mostrar_campo_insercao
-
-
-    def viver_renda(e):
-        nonlocal df
-        salario = df.loc[0, 'Salário']
-        if salario != '':
-            df.loc[0, 'Viver de Renda'] = f"{salario * 120}"
-            df.loc[0, 'Aporte Mensal'] = f"{salario * 0.2:.0f}"
-            df.fillna('')
-            df.to_excel(dataxlsx, index=False)
-
-            recarregar_tabela()
-            atualizar_informacoes()
-            
-            page.update()
-        else:
-            mostrar_campo_insercao
-
     # Configurações da página
     page.title = "Dashboard Flet"
     page.padding = 20
     # O theme_mode pode ser LIGHT ou DARK
-    page.theme_mode = ft.ThemeMode.DARK 
+    page.theme_mode = ft.ThemeMode.DARK
 
     # ==========================================
     # 1. COLUNA ESQUERDA (Botões)
     # ==========================================
     def relatorio(e):
-        nonlocal df
-        tela_central.content.controls[0].content=tela_relatorio
+        # Pede para a IA analisar a planilha e mostra a resposta no chat
+        def gerar():
+            mensagem_ia, txt_stream = mensagem("Gerando relatório...", user=False)
+            lista_mensagens.controls.append(mensagem_ia)
+            page.update()
 
-    tela_relatorio=ft.Container(
-        ft.Text()
-    )
+            resumo = calcular_resumo()
+            colunas = ["Data do registro", "Descrição", "Valor", "Tipo", "Dia de Pagamento"]
+            resposta = Gemma4(f"""
+Analise a planilha abaixo e me diga se eu estou fazendo um bom gerenciamento do meu dinheiro e me dê sugestões do que eu deveria fazer.
+Responda de forma direta, sem criar tópicos ou textos muito grandes.
+
+Salário: {moeda(resumo['salario'])}
+Receitas do mês: {moeda(resumo['receitas'])}
+Despesas do mês: {moeda(resumo['despesas'])}
+Aporte mensal planejado: {moeda(resumo['aporte'])}
+Saldo do mês: {moeda(resumo['saldo'])}
+
+Registros:
+{registros()[colunas].to_string(index=False)}
+""", 1000)
+            digitar(txt_stream, resposta)
+
+        threading.Thread(target=gerar, daemon=True).start()
 
 
     def hover_botao(e):
@@ -156,7 +208,7 @@ def Main(page: ft.Page):
     def botao(texto, icone, ao_clicar):
         return ft.Container(
             gradient=ft.LinearGradient(
-                colors=[ft.Colors.BLACK38, ft.Colors.WHITE12]
+                colors=[ft.Colors.BLACK_38, ft.Colors.WHITE_12]
             ),
             padding=3,
             border_radius=18,
@@ -178,7 +230,7 @@ def Main(page: ft.Page):
                 ),
                 width=375,
                 height=110,
-                bgcolor=ft.Colors.BLACK38,
+                bgcolor=ft.Colors.BLACK_38,
                 border_radius=16,
                 padding=20,
                 ink=True,  # Mantém o efeito visual de clique do botão
@@ -208,12 +260,12 @@ def Main(page: ft.Page):
             ),
 
             ft.Divider(color=ft.Colors.WHITE_12), # Linha divisória sutil
-            
+
             ft.Container(
                 ft.Text("MENU PRINCIPAL",
                         size=17,
                         weight="W_300",
-                        color=ft.Colors.with_opacity(0.75, ft.Colors.WHITE24)),
+                        color=ft.Colors.with_opacity(0.75, ft.Colors.WHITE_24)),
                 alignment=ft.Alignment.CENTER_LEFT,
                 padding=ft.Padding.only(left=5),
                 margin=ft.Margin.only(top=10),
@@ -222,11 +274,10 @@ def Main(page: ft.Page):
 
             # Botão com visual mais moderno
 
-            botao("Salário", ft.Icons.ATTACH_MONEY, mostrar_campo_insercao),
+            botao("Registrar Salário", ft.Icons.ATTACH_MONEY, mostrar_campo_insercao),
             botao("Relatório", ft.Icons.ANALYTICS, relatorio),
-            botao("Reserva de Emergência", ft.Icons.SHIELD, reserva_emergencia),
-            botao("Viver de Renda", ft.Icons.SAVINGS, viver_renda),
-            
+            botao("Informações", ft.Icons.INFO, lambda e: alternar_visao(e)),
+
 
             ft.Container(
                 ft.Container(
@@ -243,14 +294,14 @@ def Main(page: ft.Page):
                         ], alignment=ft.MainAxisAlignment.CENTER, spacing=0)
                     ]),
 
-                    bgcolor=ft.Colors.BLACK26,
+                    bgcolor=ft.Colors.BLACK_26,
 
                     width=375,
                     height=150,
                     padding=20,
                     border_radius=15,
                 ),
-                bgcolor=ft.Colors.BLACK12,
+                bgcolor=ft.Colors.BLACK_12,
                 gradient=ft.LinearGradient(
                         colors=[ft.Colors.WHITE, ft.Colors.BLACK],
                         begin=ft.Alignment.CENTER_LEFT,
@@ -264,7 +315,7 @@ def Main(page: ft.Page):
                 margin=ft.Margin.only(top=50)
 
             )
-            
+
         ],
         scroll=ft.ScrollMode.ADAPTIVE
     ),
@@ -272,44 +323,45 @@ def Main(page: ft.Page):
     padding=20,
     bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE), # Fundo levemente translúcido
     border_radius=15,
-    shadow=ft.BoxShadow(blur_radius=15, color=ft.Colors.BLACK26), # Sombra elegante
+    shadow=ft.BoxShadow(blur_radius=15, color=ft.Colors.BLACK_26), # Sombra elegante
     )
 
     # ==========================================
     # 2. COLUNA CENTRAL (Planilha / DataTable)
     # ==========================================
 
-    df = pd.read_excel(dataxlsx)
-    df = pd.DataFrame(df).fillna('')  # Preenche valores nulos com string vazia
-
     tabela_financeira = ft.DataTable(columns=[], rows=[], column_spacing=105)
 
-    is_visao_dados = True
+    visao_atual = "planilha"
 
     area_dinamica = ft.Container(expand=True)
 
-    def alternar_visao(e):
-        nonlocal is_visao_dados
-        # Não precisa do nonlocal tela_central se vamos apenas alterar uma propriedade dela
+    def mostrar_visao(nome):
+        nonlocal visao_atual
+        visao_atual = nome
 
-        is_visao_dados = not is_visao_dados
-
-        if is_visao_dados:
+        if nome == "planilha":
             recarregar_tabela()
             area_dinamica.content = planilha
-            tela_central.content.controls[0].controls[0].value = "Planilha Financeira"
+            titulo_tela.value = "Planilha Financeira"
+            coluna_botoes.content.controls[5].content.content.controls[1].value = "Informações"
         else:
             atualizar_informacoes()
             area_dinamica.content = tela_informacoes
-            tela_central.content.controls[0].controls[0].value = "Informações"
+            titulo_tela.value = "Informações"
+            coluna_botoes.content.controls[5].content.content.controls[1].value = "Planilha"
 
-        # Atualiza o container que segura as telas
-        tela_central.update() 
+        page.update()
+
+    def alternar_visao(e):
+        mostrar_visao("informacoes" if visao_atual == "planilha" else "planilha")
+
+    titulo_tela = ft.Text("Planilha Financeira", size=fonte+15, weight="bold", color=ft.Colors.WHITE)
 
     tela_central = ft.Container(
         ft.Column([
             ft.Row([
-                ft.Text("", size=fonte+15, weight="bold", color=ft.Colors.WHITE),
+                titulo_tela,
                 ft.Container(
                     content=ft.Icon(
                         ft.Icons.SYNC,
@@ -344,36 +396,36 @@ def Main(page: ft.Page):
         "Dia de Pagamento"
     ]
 
-    # Crie as variáveis para os textos que vão mudar
-    texto_salario = ft.Text(f"R$ {df.loc[0, 'Salário']:.2f}",
-                            size=fonte+20,
-                            color=ft.Colors.WHITE,
-                            text_align=ft.TextAlign.CENTER,
-                            margin=ft.Margin.only(top=10, bottom=8),
-                            weight="bold")
-    
-    texto_reserva = ft.Text(f"R$ {df.loc[0, 'Reserva de Emergência']:.2f}",
-                            size=fonte+20,
-                            color=ft.Colors.WHITE,
-                            text_align=ft.TextAlign.CENTER,
-                            margin=ft.Margin.only(top=10, bottom=8),
-                            weight="bold")
-    
-    texto_renda = ft.Text(f"R$ {df.loc[0, 'Viver de Renda']:.2f}",
-                            size=fonte+20,
-                            color=ft.Colors.WHITE,
-                            text_align=ft.TextAlign.CENTER,
-                            margin=ft.Margin.only(top=10, bottom=8),
-                            weight="bold")
-    
-    texto_aporte = ft.Text(f"R$ {df.loc[0, 'Aporte Mensal']:.2f}",
+    # Textos que mudam: começam zerados e são preenchidos por atualizar_informacoes()
+    texto_salario = ft.Text("R$ 0,00",
                             size=fonte+20,
                             color=ft.Colors.WHITE,
                             text_align=ft.TextAlign.CENTER,
                             margin=ft.Margin.only(top=10, bottom=8),
                             weight="bold")
 
-    texto_receitas = ft.Text(f"R$ {df.loc[0, 'Salário']+df.loc[0, 'Entradas']:.2f}",
+    texto_reserva = ft.Text("R$ 0,00",
+                            size=fonte+20,
+                            color=ft.Colors.WHITE,
+                            text_align=ft.TextAlign.CENTER,
+                            margin=ft.Margin.only(top=10, bottom=8),
+                            weight="bold")
+
+    texto_renda = ft.Text("R$ 0,00",
+                            size=fonte+20,
+                            color=ft.Colors.WHITE,
+                            text_align=ft.TextAlign.CENTER,
+                            margin=ft.Margin.only(top=10, bottom=8),
+                            weight="bold")
+
+    texto_aporte = ft.Text("R$ 0,00",
+                            size=fonte+20,
+                            color=ft.Colors.WHITE,
+                            text_align=ft.TextAlign.CENTER,
+                            margin=ft.Margin.only(top=10, bottom=8),
+                            weight="bold")
+
+    texto_receitas = ft.Text("R$ 0,00",
                                         size=25,
                                         color=ft.Colors.WHITE,
                                         text_align=ft.TextAlign.CENTER,
@@ -381,74 +433,167 @@ def Main(page: ft.Page):
                                         weight="bold",
                                         no_wrap=True)
 
-    texto_despesas = ft.Text(f"R$ {df.loc[0, 'Despesas']:.2f}",
+    texto_despesas = ft.Text("R$ 0,00",
                                     size=25,
                                     color=ft.Colors.WHITE,
                                     text_align=ft.TextAlign.CENTER,
                                     margin=ft.Margin.only(top=10, bottom=8),
                                     weight="bold")
 
-    texto_investimentos = ft.Text(f"R$ {df.loc[0, 'Aporte Mensal']:.2f}",
+    texto_investimentos = ft.Text("R$ 0,00",
                                     size=25,
                                     color=ft.Colors.WHITE,
                                     text_align=ft.TextAlign.CENTER,
                                     margin=ft.Margin.only(top=10, bottom=8),
                                     weight="bold")
 
-    texto_saldo = ft.Text(f"R$ {df.loc[0, 'Salário']+df.loc[0, 'Entradas']-df.loc[0, 'Despesas']:.2f}",
+    texto_saldo = ft.Text("R$ 0,00",
                                     size=25,
-                                    color=ft.Colors.WHITE if (df.loc[0, 'Salário']+df.loc[0, 'Entradas']-df.loc[0, 'Despesas']-df.loc[0, 'Aporte Mensal']) > 0 else ft.Colors.RED,
+                                    color=ft.Colors.WHITE,
                                     text_align=ft.TextAlign.CENTER,
                                     margin=ft.Margin.only(top=10, bottom=8),
                                     weight="bold")
+
+    # ==========================================
+    # GRÁFICOS
+    # ==========================================
+    RAIO_FATIA = 60
+    RAIO_FATIA_DESTAQUE = 70
+
+    def destacar_fatia(e: fch.PieChartEvent):
+        # Aumenta a fatia que está sob o mouse
+        for indice, fatia in enumerate(grafico_pizza.sections):
+            fatia.radius = RAIO_FATIA_DESTAQUE if indice == e.section_index else RAIO_FATIA
+        grafico_pizza.update()
+
+    # Pizza (rosca): para onde foram as despesas do mês
+    grafico_pizza = fch.PieChart(
+        sections=[],
+        sections_space=2,
+        center_space_radius=40,
+        expand=True,
+        on_event=destacar_fatia,
+    )
+    legenda_pizza = ft.Column(spacing=8, alignment=ft.MainAxisAlignment.CENTER)
+    conteudo_pizza = ft.Container(expand=True)
+
+    # Barras: entradas x despesas dos últimos 6 meses
+    grafico_barras = fch.BarChart(
+        groups=[],
+        group_spacing=20,
+        interactive=True,
+        expand=True,
+        horizontal_grid_lines=fch.ChartGridLines(color=ft.Colors.WHITE_10, width=1, dash_pattern=[4, 4]),
+        left_axis=fch.ChartAxis(label_size=60),
+        bottom_axis=fch.ChartAxis(labels=[], label_size=30),
+        tooltip=fch.BarChartTooltip(bgcolor=ft.Colors.BLACK_87, border_radius=8),
+    )
+
+    def atualizar_grafico_pizza():
+        hoje = datetime.now()
+        do_mes = registros_do_mes(registros(), hoje.year, hoje.month)
+        despesas = do_mes[do_mes["_tipo"].isin(TIPOS_DESPESA)]
+        gastos = despesas.groupby("Descrição")["_valor"].sum().sort_values(ascending=False)
+
+        if gastos.sum() <= 0:
+            conteudo_pizza.content = ft.Text(
+                f"Nenhuma despesa registrada em {NOMES_MESES[hoje.month - 1]}/{hoje.year}.",
+                color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE),
+            )
+            return
+
+        # Mais de 6 fatias fica ilegível: mantém as 5 maiores e junta o resto em "Outros"
+        if len(gastos) > 6:
+            outros = gastos.iloc[5:].sum()
+            gastos = gastos.iloc[:5].copy()
+            gastos["Outros"] = outros
+
+        total = gastos.sum()
+        grafico_pizza.sections = []
+        legenda_pizza.controls = []
+        for indice, (descricao, valor) in enumerate(gastos.items()):
+            cor = CORES_PIZZA[indice % len(CORES_PIZZA)]
+            grafico_pizza.sections.append(fch.PieChartSection(
+                value=float(valor),
+                title=f"{valor / total:.0%}",
+                title_style=ft.TextStyle(size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE),
+                color=cor,
+                radius=RAIO_FATIA,
+            ))
+            legenda_pizza.controls.append(ft.Row([
+                ft.Container(width=12, height=12, bgcolor=cor, border_radius=6),
+                ft.Text(f"{descricao}  {moeda(valor)}", size=14, color=ft.Colors.WHITE, no_wrap=True),
+            ]))
+
+        conteudo_pizza.content = ft.Row([
+            ft.Container(grafico_pizza, expand=3),
+            ft.Container(legenda_pizza, expand=2),
+        ])
+
+    def atualizar_grafico_barras():
+        tabela = registros()
+        hoje = datetime.now()
+
+        # Lista os últimos 6 meses (ano, mês), do mais antigo para o atual
+        meses = []
+        ano, mes = hoje.year, hoje.month
+        for _ in range(6):
+            meses.insert(0, (ano, mes))
+            mes -= 1
+            if mes == 0:
+                ano, mes = ano - 1, 12
+
+        grafico_barras.groups = []
+        grafico_barras.bottom_axis.labels = []
+        maior_valor = 0
+        for indice, (ano, mes) in enumerate(meses):
+            do_mes = registros_do_mes(tabela, ano, mes)
+            entradas = do_mes.loc[do_mes["_tipo"] == "Entrada", "_valor"].sum()
+            despesas = do_mes.loc[do_mes["_tipo"].isin(TIPOS_DESPESA), "_valor"].sum()
+            maior_valor = max(maior_valor, entradas, despesas)
+
+            grafico_barras.groups.append(fch.BarChartGroup(
+                x=indice,
+                spacing=4,
+                rods=[
+                    fch.BarChartRod(to_y=float(entradas), width=14, color=ft.Colors.GREEN_400,
+                                    border_radius=4, tooltip=f"Entradas\n{moeda(entradas)}"),
+                    fch.BarChartRod(to_y=float(despesas), width=14, color=ft.Colors.RED_400,
+                                    border_radius=4, tooltip=f"Despesas\n{moeda(despesas)}"),
+                ],
+            ))
+            grafico_barras.bottom_axis.labels.append(fch.ChartAxisLabel(
+                value=indice,
+                label=ft.Text(NOMES_MESES[mes - 1], size=13, color=ft.Colors.with_opacity(0.75, ft.Colors.WHITE)),
+            ))
+
+        # Folga de 20% no topo para a barra mais alta não encostar na borda
+        grafico_barras.max_y = float(maior_valor) * 1.2 if maior_valor > 0 else 100
+
     def atualizar_informacoes():
-        # ATENÇÃO: Se o arquivo do Excel mudou no computador, 
-        # você precisa ler ele de novo descomentando a linha abaixo:
-        nonlocal df 
-        df = pd.read_excel(dataxlsx).fillna('')
-        
+        resumo = calcular_resumo()
+
         # Atualiza os valores dos textos na tela
-        texto_salario.value = f"R$ {df.loc[0, 'Salário']:.2f}"
-        texto_reserva.value = f"R$ {df.loc[0, 'Reserva de Emergência']:.2f}"
-        texto_renda.value = f"R$ {df.loc[0, 'Viver de Renda']:.2f}"
-        texto_aporte.value = f"R$ {df.loc[0, 'Aporte Mensal']:.2f}"
+        texto_salario.value = moeda(resumo["salario"])
+        texto_reserva.value = moeda(resumo["reserva"])
+        texto_renda.value = moeda(resumo["renda"])
+        texto_aporte.value = moeda(resumo["aporte"])
 
-        texto_receitas.value = f"R$ {df.loc[0, 'Salário']+df.loc[0, 'Entradas']:.2f}"
-        texto_despesas.value = f"R$ {df.loc[0, 'Despesas']:.2f}"
-        texto_investimentos.value = f"R$ {df.loc[0, 'Aporte Mensal']:.2f}"
-        texto_saldo.value = f"R$ {df.loc[0, 'Salário']+df.loc[0, 'Entradas']-df.loc[0, 'Despesas']-df.loc[0, 'Aporte Mensal']:.2f}"
-        texto_saldo.color = ft.Colors.WHITE if (df.loc[0, 'Salário']+df.loc[0, 'Entradas']-df.loc[0, 'Despesas']-df.loc[0, 'Aporte Mensal']) > 0 else ft.Colors.RED
+        texto_receitas.value = moeda(resumo["receitas"])
+        texto_despesas.value = moeda(resumo["despesas"])
+        texto_investimentos.value = moeda(resumo["aporte"])
+        texto_saldo.value = moeda(resumo["saldo"])
+        texto_saldo.color = ft.Colors.WHITE if resumo["saldo"] >= 0 else ft.Colors.RED
 
-
-        if tela_informacoes:
-            tela_central.update()
-        
-
-    def alternar_visao(e):
-        nonlocal is_visao_dados
-        # Não precisa do nonlocal tela_central se vamos apenas alterar uma propriedade dela
-
-        is_visao_dados = not is_visao_dados
-
-        if is_visao_dados:
-            tela_central.content = planilha
-        else:
-            tela_central.content = tela_informacoes
-
-        atualizar_informacoes()
-        recarregar_tabela()
-
-        # Atualiza o container que segura as telas
-        tela_central.update() 
+        atualizar_grafico_pizza()
+        atualizar_grafico_barras()
 
 
     def recarregar_tabela():
-        entradas = 0
-        despesas = 0
         tabela = tabela_financeira
         tabela.columns.clear()
         tabela.rows.clear()
-        
+
         # 1. Cria os cabeçalhos da tabela APENAS para as colunas visíveis
         for coluna in visualizacao_atual:
             # É bom checar se a coluna existe no df para evitar erros caso a planilha mude
@@ -460,58 +605,44 @@ def Main(page: ft.Page):
 
         # 2. Preenche as linhas buscando os valores apenas dessas colunas
         for indice, linha in df.iterrows():
+            # A linha 0 pode existir só para guardar o salário, sem nenhum registro
+            if str(linha.get("Descrição", "")).strip() == "":
+                continue
+
             linhas_celulas = []
-            
+
             # Descobre o "Tipo" da linha ATUAL antes de preencher as colunas
-            # Usamos o .get() para evitar erro caso a coluna 'Tipo' não exista ou esteja vazia
             tipo_da_linha = str(linha.get('Tipo', '')).strip()
-            
+
+            if tipo_da_linha == "Entrada":
+                cor_tipo = ft.Colors.GREEN
+            elif tipo_da_linha == "Saída":
+                cor_tipo = ft.Colors.RED
+            elif tipo_da_linha == "Conta":
+                cor_tipo = ft.Colors.ORANGE
+            else:
+                cor_tipo = ft.Colors.WHITE # Cor padrão para prevenir erros
+
             for coluna in visualizacao_atual:
                 if coluna in df.columns:
                     valor = linha[coluna] # Pega o valor específico daquela coluna
-                    
-                    if isinstance(valor, (int, float)):
-                        # Aplica a regra de cores baseada na variável tipo_da_linha
-                        if tipo_da_linha == "Saída":
-                            cor_texto = ft.Colors.GREEN
-                            despesas+=valor
-                        elif tipo_da_linha == "Entrada":
-                            cor_texto = ft.Colors.BLUE
-                            entradas+=valor
-                        else:
-                            cor_texto = ft.Colors.WHITE # Cor padrão para prevenir erros
-                            
-                        linhas_celulas.append(ft.DataCell(ft.Text("R$ "+f"{valor:.2f}", color=cor_texto, weight="W_600")))
 
+                    if coluna == "Valor":
+                        linhas_celulas.append(ft.DataCell(ft.Text(moeda(numero(valor)), color=cor_tipo, weight="W_600")))
+
+                    elif coluna == "Tipo" and cor_tipo != ft.Colors.WHITE:
+                        linhas_celulas.append(ft.DataCell(
+                            ft.Container(
+                                content=ft.Text(str(valor), color=cor_tipo, weight="bold"),
+                                bgcolor=ft.Colors.with_opacity(0.1, cor_tipo),
+                                border_radius=10,
+                                padding=ft.Padding.only(left=10, right=10, top=5, bottom=5)
+                            )
+                        ))
                     else:
-                        if coluna == "Tipo" and tipo_da_linha == "Saída":
-                            linhas_celulas.append(ft.DataCell(
-                                ft.Container(
-                                    content=ft.Text(str(valor), color=ft.Colors.RED, weight="bold"),
-                                    bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.RED),
-                                    border_radius=10,
-                                    padding=ft.Padding.only(left=10, right=10, top=5, bottom=5)
-                                )
-                            ))
-                        elif coluna == "Tipo" and tipo_da_linha == "Entrada":
-                            linhas_celulas.append(ft.DataCell(
-                                ft.Container(
-                                    content=ft.Text(str(valor), color=ft.Colors.GREEN, weight="bold"),
-                                    bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.GREEN),
-                                    border_radius=10,
-                                    padding=ft.Padding.only(left=10, right=10, top=5, bottom=5)
-                                )
-                            ))
-                        else:
-                            linhas_celulas.append(ft.DataCell(ft.Text(str(valor), color=ft.Colors.WHITE, weight="W_600")))
+                        linhas_celulas.append(ft.DataCell(ft.Text(str(valor), color=ft.Colors.WHITE, weight="W_600")))
 
- 
             tabela.rows.append(ft.DataRow(cells=linhas_celulas))
-            
-        df.loc[0, 'Entradas'] = entradas
-        df.loc[0, 'Despesas'] = despesas
-        df.to_excel("data.xlsx")
-        page.update() # Atualiza a tela após inserir tudo
 
     planilha = ft.Container(
         content=ft.Column(
@@ -528,11 +659,9 @@ def Main(page: ft.Page):
         ),
         expand=5, # Ocupa 3 partes do espaço
         padding=ft.Padding.only(left=10, right=10),
-        bgcolor=ft.Colors.BLACK26,
+        bgcolor=ft.Colors.BLACK_26,
         border_radius=15
     )
-
-    recarregar_tabela()
 
     tela_informacoes = ft.Container(
         content=ft.Column(
@@ -555,7 +684,7 @@ def Main(page: ft.Page):
                                 ft.Text("Receita Principal", color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE))
                             ], spacing=-10, alignment=ft.CrossAxisAlignment.CENTER)
                         ]),
-                        bgcolor=ft.Colors.BLACK26,
+                        bgcolor=ft.Colors.BLACK_26,
                         border_radius=15,
                         padding=20,
                         height=135,
@@ -577,7 +706,7 @@ def Main(page: ft.Page):
                                 ft.Text("6 meses de segurança", color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE))
                             ], spacing=-10, alignment=ft.CrossAxisAlignment.CENTER)
                         ]),
-                        bgcolor=ft.Colors.BLACK26,
+                        bgcolor=ft.Colors.BLACK_26,
                         border_radius=15,
                         padding=20,
                         height=135,
@@ -601,7 +730,7 @@ def Main(page: ft.Page):
                                 ft.Text("Meta de Patrimônio", color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE))
                             ], spacing=-10, alignment=ft.CrossAxisAlignment.CENTER)
                         ]),
-                        bgcolor=ft.Colors.BLACK26,
+                        bgcolor=ft.Colors.BLACK_26,
                         border_radius=15,
                         padding=20,
                         height=135,
@@ -623,7 +752,7 @@ def Main(page: ft.Page):
                                 ft.Text("Investimento mensal", color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE))
                             ], spacing=-10, alignment=ft.CrossAxisAlignment.CENTER)
                         ]),
-                        bgcolor=ft.Colors.BLACK26,
+                        bgcolor=ft.Colors.BLACK_26,
                         border_radius=15,
                         padding=20,
                         height=135,
@@ -632,7 +761,7 @@ def Main(page: ft.Page):
                 ]),
 
                 ft.Container(
-                    bgcolor=ft.Colors.BLACK26,
+                    bgcolor=ft.Colors.BLACK_26,
                     border_radius=15,
                     padding=20,
                     content=ft.Column([
@@ -640,7 +769,7 @@ def Main(page: ft.Page):
                             ft.Icon(ft.Icons.DASHBOARD, size=30),
                             ft.Text("Resumo Geral", color=ft.Colors.WHITE, weight="bold", size=25),
                         ]),
-                        # ft.Container(height=10), 
+                        # ft.Container(height=10),
 
                         ft.Container(
                             width=float("inf"),
@@ -651,7 +780,7 @@ def Main(page: ft.Page):
                                 run_spacing=20,      # 3. Espaço vertical quando um bloco pular para a linha de baixo
                                 alignment=ft.MainAxisAlignment.CENTER,
                                 controls=[
-                                    ft.Container(bgcolor=ft.Colors.WHITE12, height=80, width=1),
+                                    ft.Container(bgcolor=ft.Colors.WHITE_12, height=80, width=1),
 
                                     # Bloco de Receitas
                                     ft.Container(
@@ -662,7 +791,7 @@ def Main(page: ft.Page):
                                         ], spacing=-10)
                                     ),
 
-                                    ft.Container(bgcolor=ft.Colors.WHITE12, height=80, width=1),
+                                    ft.Container(bgcolor=ft.Colors.WHITE_12, height=80, width=1),
 
                                     # Bloco de Despesas
                                     ft.Container(
@@ -673,7 +802,7 @@ def Main(page: ft.Page):
                                         ], spacing=-10)
                                     ),
 
-                                    ft.Container(bgcolor=ft.Colors.WHITE12, height=80, width=1),
+                                    ft.Container(bgcolor=ft.Colors.WHITE_12, height=80, width=1),
 
                                     # Bloco de Investimentos
                                     ft.Container(
@@ -684,7 +813,7 @@ def Main(page: ft.Page):
                                         ], spacing=-10)
                                     ),
 
-                                    ft.Container(bgcolor=ft.Colors.WHITE12, height=80, width=1),
+                                    ft.Container(bgcolor=ft.Colors.WHITE_12, height=80, width=1),
 
                                     # Bloco de Saldo
                                     ft.Container(
@@ -695,18 +824,51 @@ def Main(page: ft.Page):
                                         ], spacing=-10)
                                     ),
 
-                                    ft.Container(bgcolor=ft.Colors.WHITE12, height=80, width=1),
+                                    ft.Container(bgcolor=ft.Colors.WHITE_12, height=80, width=1),
                                 ]
                             )
-                        )  
+                        )
                     ])
                 ),
 
                 ft.Row(
                     alignment=ft.MainAxisAlignment.CENTER,
                     controls=[
-                        ft.Container(bgcolor=ft.Colors.BLACK, height=300, expand=5, border_radius=15),
-                        ft.Container(bgcolor=ft.Colors.BLACK, height=300, expand=6, border_radius=15)
+                        # Gráfico de pizza: despesas do mês por descrição
+                        ft.Container(
+                            bgcolor=ft.Colors.BLACK_26,
+                            height=320,
+                            expand=5,
+                            border_radius=15,
+                            padding=20,
+                            content=ft.Column([
+                                ft.Row([
+                                    ft.Icon(ft.Icons.PIE_CHART, size=26),
+                                    ft.Text("Despesas do mês", color=ft.Colors.WHITE, weight="bold", size=20),
+                                ]),
+                                conteudo_pizza,
+                            ])
+                        ),
+                        # Gráfico de barras: entradas x despesas por mês
+                        ft.Container(
+                            bgcolor=ft.Colors.BLACK_26,
+                            height=320,
+                            expand=6,
+                            border_radius=15,
+                            padding=20,
+                            content=ft.Column([
+                                ft.Row([
+                                    ft.Icon(ft.Icons.BAR_CHART, size=26),
+                                    ft.Text("Entradas x Despesas", color=ft.Colors.WHITE, weight="bold", size=20),
+                                    ft.Container(expand=True),
+                                    ft.Container(width=10, height=10, bgcolor=ft.Colors.GREEN_400, border_radius=5),
+                                    ft.Text("Entradas", size=13),
+                                    ft.Container(width=10, height=10, bgcolor=ft.Colors.RED_400, border_radius=5),
+                                    ft.Text("Despesas", size=13),
+                                ]),
+                                ft.Container(grafico_barras, expand=True),
+                            ])
+                        ),
                     ]
                 )
             ]
@@ -724,13 +886,13 @@ def Main(page: ft.Page):
                                 size=fonte+5,
                                 color=ft.Colors.WHITE,
                                 selectable=True)
-        
+
         row = ft.Row(
                     alignment=ft.MainAxisAlignment.END if user else ft.MainAxisAlignment.START,
                     controls=[
                         ft.Container(
                             width=page.width * 0.22 * 0.7, # 70% do tamanho do chat
-                            bgcolor=ft.Colors.BLACK54 if user else ft.Colors.BLACK26,
+                            bgcolor=ft.Colors.BLACK_54 if user else ft.Colors.BLACK_26,
                             border_radius=20,
                             padding=10,
                             content=texto_control)
@@ -738,71 +900,67 @@ def Main(page: ft.Page):
                     wrap=True
                 )
         return row, texto_control
+
+    def digitar(txt_stream, texto: str, cor=ft.Colors.WHITE):
+        # Efeito de digitação, letra por letra
+        txt_stream.value = ""
+        txt_stream.color = cor
+        for char in texto:
+            txt_stream.value += char
+            page.update()
+            sleep(.01)
+
     campo_mensagem = ft.TextField(hint_text="Digite...",
                                   expand=True,
                                   color=ft.Colors.WHITE,
-                                  bgcolor=ft.Colors.BLACK38,
+                                  bgcolor=ft.Colors.BLACK_38,
                                   border_radius=15)
     # Lembra da nossa regra da função com evento 'e'? Aqui está ela em ação!
     def enviar_mensagem(e):
-        if campo_mensagem.value != "":
+        texto_usuario = campo_mensagem.value.strip()
+        if texto_usuario != "":
             # Adiciona o texto na lista de mensagens
-            mensagem_usuario = mensagem(campo_mensagem.value)[0]
-            lista_mensagens.controls.append(mensagem_usuario)
+            lista_mensagens.controls.append(mensagem(texto_usuario)[0])
             campo_mensagem.value = ""
             page.update()
 
             def processar_ia():
+                nonlocal df
                 sleep(.2) # Pequeno atraso estético
 
                 mensagem_ia, txt_stream = mensagem("Processando...", user=False)
                 lista_mensagens.controls.append(mensagem_ia)
-                lista_mensagens.update()
-
+                page.update()
 
                 try:
-                    nonlocal df
-                    novo_df, acao, mensagem_chat = registerData(df, mensagem_usuario.controls[0].content.value)
-                    df = novo_df.fillna('')
+                    novo_df, acao, mensagem_chat = registerData(df, texto_usuario)
+
+                    if acao in (0, 1):
+                        # Só troca o df depois de salvar, para a tela não mostrar algo que não está no arquivo
+                        salvar_planilha(novo_df)
+                        df = novo_df
+                        recarregar_tabela()
+                        atualizar_informacoes()
 
                     if acao == 0:
-                        df.to_excel(dataxlsx, index=False)
-                        recarregar_tabela()
-                        txt_stream.value = ""
-                        txt_stream.color = ft.Colors.RED
-                        for char in "Registro removido com sucesso.":
-                            txt_stream.value += char
-                            mensagem_ia.update()
-                            sleep(.01)
-
+                        digitar(txt_stream, "Registro removido com sucesso.", ft.Colors.RED)
                     elif acao == 1:
-                        df.to_excel(dataxlsx, index=False)
-                        recarregar_tabela()
-                        txt_stream.value = "" 
-                        txt_stream.color = ft.Colors.GREEN
-                        for char in "Registro adicionado com sucesso.":
-                            txt_stream.value += char
-                            mensagem_ia.update()
-                            sleep(.01)
-                    elif acao == 2:
-                        txt_stream.value = ""
-                        for char in mensagem_chat:
-                            txt_stream.value += char
-                            page.update()
-                            sleep(.01)
+                        digitar(txt_stream, "Registro adicionado com sucesso.", ft.Colors.GREEN)
+                    else:
+                        digitar(txt_stream, mensagem_chat)
                     page.update()
                 except Exception as exc:
-                    mensagem_ia.controls[0].content.value = f"Erro ao processar: {exc}"
-                    mensagem_ia.controls[0].content.color = ft.Colors.RED
+                    txt_stream.value = f"Erro ao processar: {exc}"
+                    txt_stream.color = ft.Colors.RED
                     page.update()
 
             threading.Thread(target=processar_ia, daemon=True).start()
 
-    
+
     # O botão de enviar dispara a função acima
     botao_enviar = ft.Container(
         content=ft.IconButton(icon=ft.Icons.SEND, on_click=enviar_mensagem, icon_size=35),
-        bgcolor=ft.Colors.BLACK26,
+        bgcolor=ft.Colors.BLACK_26,
         border_radius=180,
     )
     # Apertar "Enter" no campo de texto também envia
@@ -841,11 +999,14 @@ def Main(page: ft.Page):
         expand=True # Faz a linha ocupar 100% da altura da tela
     )
 
+    # Prepara as duas telas antes de exibir; a planilha é a tela inicial
+    recarregar_tabela()
+    atualizar_informacoes()
+    area_dinamica.content = planilha
+
     page.add(layout_principal)
 
 if __name__ == "__main__":
     ft.run(Main, view=ft.AppView.WEB_BROWSER,
            host="0.0.0.0",
            port=8550)
-
-# ADICIONAR GRÁFICO

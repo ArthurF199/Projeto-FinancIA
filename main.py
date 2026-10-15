@@ -27,6 +27,62 @@ def clear():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 
+# Colunas de transações (uma linha por registro)
+COLUNAS_REGISTRO = ['Data do registro', 'Descrição', 'Valor', 'Tipo', 'Dia de Pagamento']
+# Colunas de configuração (só a linha 0 é usada)
+COLUNAS_CONFIG = ['Salário', 'Reserva de Emergência', 'Viver de Renda', 'Aporte Mensal']
+
+
+def numero(valor) -> float:
+    # Converte qualquer célula para float; células vazias ou inválidas viram 0
+    try:
+        return float(valor)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def carregar_planilha(caminho: str) -> pd.DataFrame:
+    if os.path.exists(caminho):
+        df = pd.read_excel(caminho)
+    else:
+        df = pd.DataFrame(columns=COLUNAS_REGISTRO + COLUNAS_CONFIG)
+
+    # Remove colunas de índice que foram salvas por engano e totais antigos (agora são calculados na hora)
+    df = df.loc[:, ~df.columns.astype(str).str.startswith('Unnamed')]
+    df = df.drop(columns=['Entradas', 'Despesas'], errors='ignore')
+
+    for coluna in COLUNAS_REGISTRO + COLUNAS_CONFIG:
+        if coluna not in df.columns:
+            df[coluna] = ''
+
+    df = df.astype(object).fillna('').reset_index(drop=True)
+
+    # A linha 0 guarda as configurações, então ela precisa existir mesmo sem registros
+    if df.empty:
+        df.loc[0] = ''
+    return df
+
+
+def remover_registro(df: pd.DataFrame, indice) -> pd.DataFrame:
+    # Guarda as configurações antes de apagar, pois elas vivem na linha 0
+    config = df.loc[0, COLUNAS_CONFIG].copy()
+
+    df = df.drop(indice).reset_index(drop=True)
+    if df.empty:
+        df.loc[0] = ''
+
+    df.loc[0, COLUNAS_CONFIG] = config.values
+    return df
+
+
+def extrair_json(texto: str) -> dict:
+    # O modelo às vezes envolve o JSON em ```json ... ```, então pegamos só o trecho entre chaves
+    inicio, fim = texto.find('{'), texto.rfind('}')
+    if inicio == -1 or fim == -1:
+        raise ValueError(f'A IA não retornou um JSON válido: {texto}')
+    return json.loads(texto[inicio:fim + 1])
+
+
 def title(title: str):
     print('-'*10, title, '-'*10)
 
@@ -92,39 +148,47 @@ Agora processe a seguinte entrada do usuário:
 Entrada: {prompt}
     """, 1000, stream=False)
 
-    print(repr(response))
-    response = json.loads(response)
-    new_df = df.fillna('').copy()
+    response = extrair_json(response)
+    new_df = df.fillna('').reset_index(drop=True)
     n = len(new_df)
-    
+
     match response['Ação']:
         case 2:
-            return (new_df, response['Ação'], response['Resposta_Chat'])
+            return (new_df, 2, response['Resposta_Chat'] or '')
         case 0:
             desc_resp = (response['Descrição'] or '').lower().strip()
-            val_resp = (str(response['Valor']) or '').lower().strip()
-            data_resp = (response['Data'] or '').lower().strip()
+            data_resp = (response['Data'] or '').strip()
             tipo_resp = (response['Tipo'] or '').lower().strip()
-            pag_resp = (response['Dia de Pagamento'] or '').lower().strip()
 
-
+            # Valor é comparado como número: "300" (IA) e 300.0 (planilha) são iguais
             filtro = (
-            (new_df['Descrição'].astype(str).str.lower().str.strip() == desc_resp) & 
-            (new_df['Valor'].astype(str).str.lower().str.strip() == val_resp) & 
-            (new_df['Data do registro'].astype(str).str.lower().str.strip() == data_resp) & 
-            (new_df['Tipo'].astype(str).str.lower().str.strip() == tipo_resp) &
-            (new_df['Dia de Pagamento'].astype(str).str.lower().str.strip() == pag_resp)
+                (new_df['Descrição'].astype(str).str.lower().str.strip() == desc_resp) &
+                (new_df['Valor'].apply(numero) == numero(response['Valor'])) &
+                (new_df['Tipo'].astype(str).str.lower().str.strip() == tipo_resp)
             )
+            encontrados = new_df[filtro]
 
+            # Se houver mais de um igual, a data desempata
+            mesma_data = encontrados[encontrados['Data do registro'].astype(str).str.strip() == data_resp]
+            if not mesma_data.empty:
+                encontrados = mesma_data
 
-            new_df = new_df.drop(new_df[filtro].index)
+            if encontrados.empty:
+                return (new_df, 2, 'Não encontrei esse registro na planilha, então nada foi removido.')
+
+            # Remove apenas um registro por pedido
+            new_df = remover_registro(new_df, encontrados.index[0])
         case 1:
-            new_df.loc[n, 'Descrição'] = response['Descrição'].strip()
-            new_df.loc[n, 'Valor'] = float(response['Valor'])
-            new_df.loc[n, 'Data do registro'] = response['Data'].strip()
-            new_df.loc[n, 'Tipo'] = response['Tipo'].strip()
-            new_df.loc[n, 'Dia de Pagamento'] = response['Dia de Pagamento']
-    return (new_df, response['Ação'], '')
+            # Se a planilha só tem a linha de configuração vazia, reaproveita ela
+            if n == 1 and str(new_df.loc[0, 'Descrição']).strip() == '':
+                n = 0
+
+            new_df.loc[n, 'Descrição'] = (response['Descrição'] or '').strip()
+            new_df.loc[n, 'Valor'] = numero(response['Valor'])
+            new_df.loc[n, 'Data do registro'] = (response['Data'] or datetime.now().strftime('%d/%m/%Y')).strip()
+            new_df.loc[n, 'Tipo'] = (response['Tipo'] or '').strip()
+            new_df.loc[n, 'Dia de Pagamento'] = response['Dia de Pagamento'] or ''
+    return (new_df.fillna(''), response['Ação'], '')
 
 
 # clear()
