@@ -3,18 +3,20 @@ import ia
 import json
 import os
 from time import sleep
-from datetime import datetime
+from datetime import datetime, timedelta
+import unicodedata
 import flet as ft
 
 
 def saveXLSX(df):
     try:
         while True:
-            if input('Deseja salvar as informações? [S/N]') in 'Ss':
+            resposta = input('Deseja salvar as informações? [S/N]').strip()
+            if resposta in ('S', 's'):
                 df.to_excel('data.xlsx', index=False)
                 clear()
                 break
-            elif input('Deseja salvar as informações? [S/N]') in 'Nn':
+            elif resposta in ('N', 'n'):
                 clear()
                 break
             else:
@@ -28,17 +30,67 @@ def clear():
 
 
 # Colunas de transações (uma linha por registro)
-COLUNAS_REGISTRO = ['Data do registro', 'Descrição', 'Valor', 'Tipo', 'Dia de Pagamento']
+COLUNAS_REGISTRO = ['Data do registro', 'Descrição', 'Valor', 'Tipo', 'Categoria', 'Dia de Pagamento']
 # Colunas de configuração (só a linha 0 é usada)
 COLUNAS_CONFIG = ['Salário', 'Reserva de Emergência', 'Viver de Renda', 'Aporte Mensal']
+
+TIPOS = ['Entrada', 'Saída', 'Conta']
+
+# Fonte única das categorias: o prompt é montado a partir daqui e a resposta da IA é validada contra elas
+CATEGORIAS_ENTRADA = {
+    'Salário': 'salário, 13º, férias, pagamento fixo do emprego',
+    'Renda Extra': 'freelas, bicos, vendas, comissões, presentes em dinheiro, reembolsos',
+    'Rendimentos': 'juros, dividendos, rendimento de investimentos, aluguel recebido',
+}
+CATEGORIAS_DESPESA = {
+    'Alimentação': 'supermercado, feira, padaria, restaurante, lanche, delivery',
+    'Moradia': 'aluguel, condomínio, IPTU, manutenção e itens para a casa',
+    'Contas de Casa': 'água, luz, gás, internet, telefone, celular',
+    'Transporte': 'combustível, Uber/táxi, ônibus/metrô, estacionamento, manutenção do carro, IPVA',
+    'Saúde': 'farmácia, consultas, exames, plano de saúde, academia',
+    'Educação': 'escola, faculdade, cursos, livros, material escolar',
+    'Lazer': 'cinema, viagens, passeios, festas, bares, jogos',
+    'Assinaturas': 'streaming, aplicativos, softwares e outros serviços recorrentes',
+    'Compras': 'roupas, calçados, eletrônicos, presentes, cuidados pessoais',
+    'Dívidas': 'fatura do cartão, empréstimos, financiamentos, parcelas de acordos',
+    'Investimentos': 'aportes, compra de ações, Tesouro, CDB, poupança, reserva de emergência',
+}
+CATEGORIA_PADRAO = 'Outros'
 
 
 def numero(valor) -> float:
     # Converte qualquer célula para float; células vazias ou inválidas viram 0
+    if isinstance(valor, str):
+        valor = valor.replace('R$', '').strip()
+        # Formato brasileiro: "1.234,56" -> "1234.56"
+        if ',' in valor:
+            valor = valor.replace('.', '').replace(',', '.')
     try:
         return float(valor)
     except (TypeError, ValueError):
         return 0.0
+
+
+def normalizar(texto) -> str:
+    # "Saída", "saida" e " SAÍDA " ficam iguais na comparação
+    texto = unicodedata.normalize('NFKD', str(texto or '').strip().lower())
+    return ''.join(c for c in texto if not unicodedata.combining(c))
+
+
+def escolher_opcao(valor, opcoes, padrao=''):
+    # Devolve a opção com a grafia oficial, ou o padrão se a IA respondeu algo fora da lista
+    for opcao in opcoes:
+        if normalizar(opcao) == normalizar(valor):
+            return opcao
+    return padrao
+
+
+def data_valida(texto, padrao: str = '') -> str:
+    # Garante "DD/MM/AAAA"; datas em outro formato ficariam invisíveis nos gráficos
+    try:
+        return datetime.strptime(str(texto or '').strip(), '%d/%m/%Y').strftime('%d/%m/%Y')
+    except ValueError:
+        return padrao
 
 
 def carregar_planilha(caminho: str) -> pd.DataFrame:
@@ -93,82 +145,138 @@ def options(options: list):
     return int(input('Digite o número da opção desejada: '))
 
 
+def proximo_dia(hoje: datetime, dia: int) -> str:
+    # Próxima ocorrência do dia do mês a partir de hoje (usado no exemplo de conta recorrente)
+    ano, mes = hoje.year, hoje.month
+    if hoje.day > dia:
+        ano, mes = (ano + 1, 1) if mes == 12 else (ano, mes + 1)
+    return f'{dia:02d}/{mes:02d}/{ano}'
+
+
+def montar_prompt(df: pd.DataFrame, mensagem: str) -> str:
+    agora = datetime.now()
+    hoje = agora.strftime('%d/%m/%Y')
+    ontem = (agora - timedelta(days=1)).strftime('%d/%m/%Y')
+    dias_semana = ['segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado', 'domingo']
+
+    # Só os registros de verdade e só as colunas de registro: as colunas de configuração são ruído para a IA
+    registros = df[df['Descrição'].astype(str).str.strip() != ''][COLUNAS_REGISTRO].tail(50)
+    planilha = registros.to_string(index=False) if not registros.empty else '(nenhum registro ainda)'
+
+    def lista(categorias: dict) -> str:
+        return '\n'.join(f'- "{nome}": {exemplos}.' for nome, exemplos in categorias.items())
+
+    vazio = {'Descrição': None, 'Valor': None, 'Data': None, 'Tipo': None, 'Dia de Pagamento': None, 'Categoria': None}
+    exemplos = [
+        ('Recebi R$ 800,00 de um freela de design.',
+         {'Ação': 1, 'Resposta_Chat': None, 'Descrição': 'Freela de design', 'Valor': 800, 'Data': hoje,
+          'Tipo': 'Entrada', 'Dia de Pagamento': None, 'Categoria': 'Renda Extra'}),
+        ('Gastei 120,50 no mercado ontem',
+         {'Ação': 1, 'Resposta_Chat': None, 'Descrição': 'Supermercado', 'Valor': 120.5, 'Data': ontem,
+          'Tipo': 'Saída', 'Dia de Pagamento': None, 'Categoria': 'Alimentação'}),
+        ('abasteci o carro, deu 200 conto',
+         {'Ação': 1, 'Resposta_Chat': None, 'Descrição': 'Combustível', 'Valor': 200, 'Data': hoje,
+          'Tipo': 'Saída', 'Dia de Pagamento': None, 'Categoria': 'Transporte'}),
+        ('Todo dia 10 pago R$ 89,90 da internet.',
+         {'Ação': 1, 'Resposta_Chat': None, 'Descrição': 'Internet', 'Valor': 89.9, 'Data': hoje,
+          'Tipo': 'Conta', 'Dia de Pagamento': proximo_dia(agora, 10), 'Categoria': 'Contas de Casa'}),
+        ('Coloquei 500 reais na minha reserva de emergência.',
+         {'Ação': 1, 'Resposta_Chat': None, 'Descrição': 'Reserva de emergência', 'Valor': 500, 'Data': hoje,
+          'Tipo': 'Saída', 'Dia de Pagamento': None, 'Categoria': 'Investimentos'}),
+        ('Apaga aquele gasto de 300 no restaurante.',
+         {'Ação': 0, 'Resposta_Chat': None, 'Descrição': 'Restaurante', 'Valor': 300, 'Data': hoje,
+          'Tipo': 'Saída', 'Dia de Pagamento': None, 'Categoria': 'Alimentação'}),
+        ('Vale a pena financiar um carro em 60 vezes?',
+         {'Ação': 2, 'Resposta_Chat': 'Geralmente não, porque os juros de 60 meses fazem o carro sair bem mais caro. '
+                                      'O ideal é juntar uma boa entrada para financiar menos e por menos tempo.', **vazio}),
+    ]
+    texto_exemplos = '\n\n'.join(
+        f'Mensagem: {entrada}\nJSON: {json.dumps(saida, ensure_ascii=False)}' for entrada, saida in exemplos
+    )
+
+    return f"""Você é um extrator de dados financeiros. Leia a mensagem do usuário e responda com UM único objeto JSON, sem nenhum texto antes ou depois e sem markdown.
+
+Hoje é {dias_semana[agora.weekday()]}, {hoje}.
+
+=== REGISTROS ATUAIS DA PLANILHA ===
+{planilha}
+====================================
+
+PASSO 1 - DEFINA A "Ação" (número inteiro):
+- 1: o usuário quer registrar um gasto, uma conta ou um dinheiro recebido.
+- 0: o usuário quer remover, apagar ou excluir um registro que está na planilha acima.
+- 2: qualquer outra coisa (dúvidas, conselhos, conversa) OU pedido de remoção de um registro que NÃO está na planilha.
+
+PASSO 2 - PREENCHA OS CAMPOS:
+- "Resposta_Chat": só na Ação 2. Resposta em texto simples, direta, com no máximo 3 frases. Se o pedido era remover algo que não existe, diga que não encontrou esse registro na planilha. Nas Ações 0 e 1, use null.
+- "Descrição": nome curto do gasto ou recebimento, com inicial maiúscula (ex: "Supermercado", "Conta de luz").
+- "Valor": número positivo com ponto decimal, sem "R$" e sem sinal de menos (ex: 120.5). Gastos também são positivos.
+- "Data": data do registro em "DD/MM/AAAA". Converta datas relativas ("ontem", "sexta passada") a partir de hoje. Sem data na mensagem, use {hoje}.
+- "Tipo": exatamente um destes:
+  - "Entrada": dinheiro que o usuário recebeu.
+  - "Saída": gasto pontual, já feito.
+  - "Conta": conta recorrente ou com vencimento (aluguel, luz, internet, mensalidade, parcela, fatura).
+- "Dia de Pagamento": só quando "Tipo" for "Conta": a próxima data de vencimento em "DD/MM/AAAA" (ex: "todo dia 10" = o próximo dia 10 a partir de hoje). Nos outros casos, null.
+- "Categoria": veja o passo 3.
+Na Ação 2, todos os campos, exceto "Ação" e "Resposta_Chat", são null.
+
+PASSO 3 - ESCOLHA A "Categoria" (copie o nome exatamente como está, com acentos; nunca invente uma categoria nova):
+Se "Tipo" for "Entrada":
+{lista(CATEGORIAS_ENTRADA)}
+Se "Tipo" for "Saída" ou "Conta":
+{lista(CATEGORIAS_DESPESA)}
+Para qualquer "Tipo":
+- "{CATEGORIA_PADRAO}": somente quando nenhuma das categorias acima servir.
+Como decidir:
+1. Pense no que foi comprado, pago ou recebido (produto, local ou motivo), não só nas palavras usadas. Ex: "abasteci" = "Transporte"; "comprei remédio" = "Saúde"; "iFood" = "Alimentação".
+2. A categoria tem que pertencer ao grupo do "Tipo" escolhido.
+3. Se servirem duas categorias, escolha a do objetivo principal do gasto ou recebimento.
+4. Se a planilha já tiver um registro parecido com categoria preenchida, repita essa categoria.
+
+REMOÇÕES (Ação 0):
+Ache na planilha o registro citado e copie EXATAMENTE os valores dele: "Descrição", "Valor", "Tipo", "Categoria" e "Data" (a coluna "Data do registro"). Se a categoria estiver vazia na planilha, use null. Se mais de um registro combinar, escolha o mais recente.
+
+EXEMPLOS (as datas consideram que hoje é {hoje}):
+
+{texto_exemplos}
+
+Agora responda apenas com o JSON para a mensagem abaixo.
+Mensagem: {mensagem}
+JSON:"""
+
+
 def registerData(df, prompt):
-    print(('Carregando...'))
-    response = ia.Gemma4(f"""            
-Você é um assistente especialista em extração de dados financeiros.
-Sua tarefa é analisar a mensagem do usuário e extrair os dados para um objeto JSON estrito.
-NÃO retorne nenhuma palavra adicional, explicações ou blocos de código markdown. Retorne APENAS o JSON puro.
+    print('Carregando...')
+    # temperatura 0 deixa a extração previsível, e formato "json" obriga o Ollama a devolver um JSON válido
+    resposta = ia.Gemma4(montar_prompt(df, prompt), 1000, stream=False, formato='json', temperatura=0)
 
-Hoje é: {datetime.now().strftime("%d/%m/%Y")}
-
-=== DADOS ATUAIS DA PLANILHA ===
-Aqui estão os registros recentes do usuário:
-{df.tail(50).fillna('').to_string(index=False)}
-=================================
-
-Regras para os campos do JSON:
-- "Ação": Inteiro. 1 para adicionar, 0 para remover, 2 para dúvidas financeiras ou bate-papo
-- "Resposta_Chat": Se a ação for 2, escreva aqui a sua dica financeira. Se for 0 ou 1, retorne null
-- "Descrição": String curta resumindo o gasto/receita.
-- "Valor": Número (float/int) usando ponto para decimais. Ex: 150.50.
-- "Data": String no formato "DD/MM/AAAA". Se não informada, use a de hoje ({datetime.now().strftime("%d/%m/%Y")}).
-- "Tipo": String categórica ("Entrada", "Saída" ou "Conta").
-- "Dia de Pagamento": String "DD/MM/AAAA". Usado APENAS se for uma conta para o futuro.
-
-IMPORTANTE PARA REMOÇÕES (Ação 0): 
-Se o usuário pedir para remover um registro, olhe nos "DADOS ATUAIS DA PLANILHA" acima, identifique de qual registro ele está falando e copie os dados EXATOS (Descrição, Valor, Data e Tipo) para preencher o JSON.
-
-CASO O USUÁRIO PEÇA PARA REMOVER ALGO QUE NÃO ESTEJA NA PLANILHA RETORNE A AÇÃO 2 E DIGA QUE NÃO TEM ACESSO A TAL REGISTRO.
-
-Exemplos de extrações perfeitas:
-
-Entrada: Recebi meu salário de R$ 3.500,00 hoje.
-Saída: {{"Ação": 1, "Resposta_Chat": null, "Descrição": "Salário", "Valor": 3500, "Data": "{datetime.now().strftime("%d/%m/%Y")}", "Tipo": "Entrada", "Dia de Pagamento": null}}
-
-Entrada: Gastei R$ 120,50 no supermercado ontem.
-Saída: {{"Ação": 1, "Resposta_Chat": null, "Descrição": "Supermercado", "Valor": 120.50, "Data": "15/08/2026", "Tipo": "Saída", "Dia de Pagamento": null}}
-
-Entrada: Todo dia 10 pago R$ 89,90 da internet.
-Saída: {{"Ação": 1, "Resposta_Chat": null, "Descrição": "Internet", "Valor": 89.90, "Data": "{datetime.now().strftime("%d/%m/%Y")}", "Tipo": "Saída", "Dia de Pagamento": "10/08/2026"}}
-
-Entrada: Remova o gasto de restaurante de R$ 300,00.
-Saída: {{"Ação": 0, "Resposta_Chat": null, "Descrição": "Restaurante", "Valor": 300, "Data": "{datetime.now().strftime("%d/%m/%Y")}", "Tipo": "Saída", "Dia de Pagamento": null}}
-
-Entrada: Como devo começar a montar minha reserva de emergência?
-Saída: {{"Ação": 2, "Resposta_Chat": "Para começar, calcule seu custo de vida mensal e multiplique por 6. Guarde esse valor gradualmente em investimentos seguros e de alta liquidez, como Tesouro Selic ou um CDB que renda 100% do CDI.", "Descrição": null, "Valor": null, "Data": null, "Tipo": null, "Dia de Pagamento": null}}
-
-Entrada: Vale a pena financiar um carro em 60 vezes?
-Saída: {{"Ação": 2, "Resposta_Chat": "Geralmente não é recomendado, pois o acúmulo de juros ao longo de 60 meses fará você pagar um valor muito maior pelo veículo. O ideal é poupar para dar uma boa entrada e reduzir os juros e o tempo de financiamento.", "Descrição": null, "Valor": null, "Data": null, "Tipo": null, "Dia de Pagamento": null}}
-
-Entrada: O que é o CDI?
-Saída: {{"Ação": 2, "Resposta_Chat": "O CDI (Certificado de Depósito Interbancário) é uma taxa que os bancos usam para emprestar dinheiro entre si. Ele serve como principal referência (benchmark) para a rentabilidade dos investimentos de renda fixa no Brasil.", "Descrição": null, "Valor": null, "Data": null, "Tipo": null, "Dia de Pagamento": null}}
-
-Agora processe a seguinte entrada do usuário:
-Entrada: {prompt}
-    """, 1000, stream=False)
-
-    response = extrair_json(response)
+    response = extrair_json(resposta)
     new_df = df.fillna('').reset_index(drop=True)
     n = len(new_df)
 
-    match response['Ação']:
-        case 2:
-            return (new_df, 2, response['Resposta_Chat'] or '')
-        case 0:
-            desc_resp = (response['Descrição'] or '').lower().strip()
-            data_resp = (response['Data'] or '').strip()
-            tipo_resp = (response['Tipo'] or '').lower().strip()
+    # A IA às vezes manda a ação como texto ("1"); qualquer coisa inválida vira bate-papo
+    try:
+        acao = int(response.get('Ação', 2))
+    except (TypeError, ValueError):
+        acao = 2
 
+    hoje = datetime.now().strftime('%d/%m/%Y')
+    descricao = str(response.get('Descrição') or '').strip()
+    valor = abs(numero(response.get('Valor')))
+    tipo = escolher_opcao(response.get('Tipo'), TIPOS)
+
+    match acao:
+        case 0:
             # Valor é comparado como número: "300" (IA) e 300.0 (planilha) são iguais
             filtro = (
-                (new_df['Descrição'].astype(str).str.lower().str.strip() == desc_resp) &
-                (new_df['Valor'].apply(numero) == numero(response['Valor'])) &
-                (new_df['Tipo'].astype(str).str.lower().str.strip() == tipo_resp)
+                (new_df['Descrição'].apply(normalizar) == normalizar(descricao)) &
+                (new_df['Valor'].apply(numero) == valor) &
+                (new_df['Tipo'].apply(normalizar) == normalizar(tipo))
             )
             encontrados = new_df[filtro]
 
             # Se houver mais de um igual, a data desempata
+            data_resp = data_valida(response.get('Data'))
             mesma_data = encontrados[encontrados['Data do registro'].astype(str).str.strip() == data_resp]
             if not mesma_data.empty:
                 encontrados = mesma_data
@@ -176,19 +284,30 @@ Entrada: {prompt}
             if encontrados.empty:
                 return (new_df, 2, 'Não encontrei esse registro na planilha, então nada foi removido.')
 
-            # Remove apenas um registro por pedido
-            new_df = remover_registro(new_df, encontrados.index[0])
+            # Remove apenas um registro por pedido (o mais recente, como o prompt pede)
+            new_df = remover_registro(new_df, encontrados.index[-1])
         case 1:
+            if descricao == '' or valor == 0 or tipo == '':
+                return (new_df, 2, 'Não consegui entender o registro. Diga o que foi, o valor e se foi um gasto ou um recebimento.')
+
+            # A categoria precisa ser do mesmo grupo do tipo; fora disso vira "Outros"
+            categorias = CATEGORIAS_ENTRADA if tipo == 'Entrada' else CATEGORIAS_DESPESA
+            categoria = escolher_opcao(response.get('Categoria'), categorias, CATEGORIA_PADRAO)
+
             # Se a planilha só tem a linha de configuração vazia, reaproveita ela
             if n == 1 and str(new_df.loc[0, 'Descrição']).strip() == '':
                 n = 0
 
-            new_df.loc[n, 'Descrição'] = (response['Descrição'] or '').strip()
-            new_df.loc[n, 'Valor'] = numero(response['Valor'])
-            new_df.loc[n, 'Data do registro'] = (response['Data'] or datetime.now().strftime('%d/%m/%Y')).strip()
-            new_df.loc[n, 'Tipo'] = (response['Tipo'] or '').strip()
-            new_df.loc[n, 'Dia de Pagamento'] = response['Dia de Pagamento'] or ''
-    return (new_df.fillna(''), response['Ação'], '')
+            new_df.loc[n, 'Descrição'] = descricao
+            new_df.loc[n, 'Valor'] = valor
+            new_df.loc[n, 'Data do registro'] = data_valida(response.get('Data'), hoje)
+            new_df.loc[n, 'Tipo'] = tipo
+            new_df.loc[n, 'Categoria'] = categoria
+            # Dia de pagamento só faz sentido para contas
+            new_df.loc[n, 'Dia de Pagamento'] = data_valida(response.get('Dia de Pagamento')) if tipo == 'Conta' else ''
+        case _:
+            return (new_df, 2, str(response.get('Resposta_Chat') or '').strip())
+    return (new_df.fillna(''), acao, '')
 
 
 # clear()

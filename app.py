@@ -2,8 +2,9 @@ import flet as ft
 import flet_charts as fch
 import pandas as pd
 from ia import *
-from main import registerData, carregar_planilha, numero
+from main import registerData, carregar_planilha, numero, COLUNAS_REGISTRO
 import os
+import re
 import threading
 from time import sleep
 from datetime import datetime
@@ -112,10 +113,11 @@ def Main(page: ft.Page):
 
         if valor != "":
             try:
-                # Aceita "1500", "1500,00" e "1.500,00"
-                if "," in valor:
+                # Aceita "1500", "1500,00", "1.500,00" e "1.500"
+                valor = valor.replace("R$", "").strip()
+                if "," in valor or re.fullmatch(r"\d{1,3}(\.\d{3})+", valor):
                     valor = valor.replace(".", "").replace(",", ".")
-                valor_convertido = float(valor.replace("R$", "").strip())
+                valor_convertido = float(valor)
 
                 df.loc[0, "Salário"] = valor_convertido
                 calcular_metas()
@@ -180,7 +182,6 @@ def Main(page: ft.Page):
             page.update()
 
             resumo = calcular_resumo()
-            colunas = ["Data do registro", "Descrição", "Valor", "Tipo", "Dia de Pagamento"]
             resposta = Gemma4(f"""
 Analise a planilha abaixo e me diga se eu estou fazendo um bom gerenciamento do meu dinheiro e me dê sugestões do que eu deveria fazer.
 Responda de forma direta, sem criar tópicos ou textos muito grandes.
@@ -192,7 +193,7 @@ Aporte mensal planejado: {moeda(resumo['aporte'])}
 Saldo do mês: {moeda(resumo['saldo'])}
 
 Registros:
-{registros()[colunas].to_string(index=False)}
+{registros()[COLUNAS_REGISTRO].to_string(index=False)}
 """, 1000)
             digitar(txt_stream, resposta)
 
@@ -244,6 +245,9 @@ Registros:
     coluna_botoes = ft.Container(
     content=ft.Column(
         controls=[
+          # Parte de cima: rola em telas pequenas e ocupa o espaço livre
+          ft.Column(
+            controls=[
             ft.Container(
                 ft.Row([
                     ft.Container(
@@ -274,11 +278,15 @@ Registros:
 
             # Botão com visual mais moderno
 
+            botao("Informações", ft.Icons.INFO, lambda e: alternar_visao(e)),
             botao("Registrar Salário", ft.Icons.ATTACH_MONEY, mostrar_campo_insercao),
             botao("Relatório", ft.Icons.ANALYTICS, relatorio),
-            botao("Informações", ft.Icons.INFO, lambda e: alternar_visao(e)),
+            ],
+            expand=True,
+            scroll=ft.ScrollMode.ADAPTIVE
+          ),
 
-
+            # Parte de baixo: card fixo no fundo da coluna
             ft.Container(
                 ft.Container(
                     ft.Row([
@@ -313,11 +321,8 @@ Registros:
                 height=150,
                 border_radius=15,
                 margin=ft.Margin.only(top=50)
-
             )
-
         ],
-        scroll=ft.ScrollMode.ADAPTIVE
     ),
     width=375, # Largura fixa para o menu
     padding=20,
@@ -344,12 +349,12 @@ Registros:
             recarregar_tabela()
             area_dinamica.content = planilha
             titulo_tela.value = "Planilha Financeira"
-            coluna_botoes.content.controls[5].content.content.controls[1].value = "Informações"
+            coluna_botoes.content.controls[0].controls[3].content.content.controls[1].value = "Informações"
         else:
             atualizar_informacoes()
             area_dinamica.content = tela_informacoes
             titulo_tela.value = "Informações"
-            coluna_botoes.content.controls[5].content.content.controls[1].value = "Planilha"
+            coluna_botoes.content.controls[0].controls[3].content.content.controls[1].value = "Planilha"
 
         page.update()
 
@@ -362,18 +367,6 @@ Registros:
         ft.Column([
             ft.Row([
                 titulo_tela,
-                ft.Container(
-                    content=ft.Icon(
-                        ft.Icons.SYNC,
-                        color=ft.Colors.with_opacity(0.5, ft.Colors.WHITE),
-                    ),
-                    # bgcolor=ft.Colors.BLACK_26,
-                    height=30,
-                    width=30,
-                    border_radius=30,
-                    margin=ft.Margin.only(top=5),
-                    on_click=alternar_visao,
-                ),
             ],
             margin=20),
 
@@ -388,13 +381,7 @@ Registros:
     )
 
 
-    visualizacao_atual = [
-        "Data do registro",
-        "Descrição",
-        "Valor",
-        "Tipo",
-        "Dia de Pagamento"
-    ]
+    visualizacao_atual = COLUNAS_REGISTRO
 
     # Textos que mudam: começam zerados e são preenchidos por atualizar_informacoes()
     texto_salario = ft.Text("R$ 0,00",
