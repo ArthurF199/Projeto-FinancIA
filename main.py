@@ -71,6 +71,11 @@ def numero(valor) -> float:
         return 0.0
 
 
+def moeda(valor: float) -> str:
+    # Formato brasileiro: R$ 1.234,56
+    return 'R$ ' + f'{valor:,.2f}'.replace(',', 'X').replace('.', ',').replace('X', '.')
+
+
 def normalizar(texto) -> str:
     # "Saída", "saida" e " SAÍDA " ficam iguais na comparação
     texto = unicodedata.normalize('NFKD', str(texto or '').strip().lower())
@@ -285,6 +290,9 @@ def registerData(df, prompt):
                 return (new_df, 2, 'Não encontrei esse registro na planilha, então nada foi removido.')
 
             # Remove apenas um registro por pedido (o mais recente, como o prompt pede)
+            removido = new_df.loc[encontrados.index[-1]]
+            mensagem = (f"Removi: {removido['Descrição']} · {moeda(numero(removido['Valor']))} · "
+                        f"{removido['Data do registro']}")
             new_df = remover_registro(new_df, encontrados.index[-1])
         case 1:
             if descricao == '' or valor == 0 or tipo == '':
@@ -305,9 +313,12 @@ def registerData(df, prompt):
             new_df.loc[n, 'Categoria'] = categoria
             # Dia de pagamento só faz sentido para contas
             new_df.loc[n, 'Dia de Pagamento'] = data_valida(response.get('Dia de Pagamento')) if tipo == 'Conta' else ''
+            # Mostra o que a IA entendeu, para o usuário conferir
+            mensagem = (f"Adicionei: {descricao} · {moeda(valor)} · {categoria} · "
+                        f"{new_df.loc[n, 'Data do registro']}")
         case _:
             return (new_df, 2, str(response.get('Resposta_Chat') or '').strip())
-    return (new_df.fillna(''), acao, '')
+    return (new_df.fillna(''), acao, mensagem)
 
 
 # clear()
