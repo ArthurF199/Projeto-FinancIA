@@ -1,22 +1,24 @@
 import flet as ft
 import flet_charts as fch
 import pandas as pd
-from ia import *
-from main import registerData, carregar_planilha, remover_registro, numero, moeda, COLUNAS_REGISTRO
+from ia import Gemma4
+from main import (interpretar_mensagem, aplicar_resposta, carregar_planilha, remover_registro, numero, moeda,
+                  esta_paga, preparar_registros, eh_despesa, eh_investimento, historico_salario, definir_salario,
+                  totais as calcular_totais, COLUNAS_REGISTRO, COLUNA_PAGO, TIPOS_DESPESA, NOMES_MESES_COMPLETOS)
 import os
 import re
 import random
+import calendar
 import threading
 from time import sleep
 from datetime import datetime, timedelta
 
 
-TIPOS_DESPESA = ["Saída", "Conta"]
-CATEGORIA_INVESTIMENTO = "Investimentos"
-CATEGORIA_SALARIO = "Salário"
 NOMES_MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"]
-NOMES_MESES_COMPLETOS = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
-                         "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"]
+# Larguras (px) em que o layout muda: abaixo de LARGURA_COMPACTA o menu vira só ícones,
+# abaixo de LARGURA_CELULAR fica uma tela por vez com barra de navegação embaixo
+LARGURA_COMPACTA = 1500
+LARGURA_CELULAR = 1000
 # Paleta: azul-marinho profundo em camadas (fundo -> painel -> cartão -> elevado) + verde-esmeralda como destaque
 AZUL_FUNDO = "#020817"
 AZUL_PAINEL = "#061022"
@@ -49,8 +51,28 @@ ROTULO_TIPO = {"Entrada": "Entrada", "Saída": "Gasto", "Conta": "Conta fixa"}
 COR_TIPO = {"Entrada": VERDE, "Saída": VERMELHO, "Conta": ROXO}
 ROTULO_COLUNA = {"Data do registro": "Data", "Dia de Pagamento": "Vencimento"}
 
+# Extrato: ícone de cada categoria (as mesmas de main.py) e os filtros por tipo
+ICONE_CATEGORIA = {
+    "Salário": ft.Icons.WORK,
+    "Renda Extra": ft.Icons.ATTACH_MONEY,
+    "Rendimentos": ft.Icons.TRENDING_UP,
+    "Alimentação": ft.Icons.RESTAURANT,
+    "Moradia": ft.Icons.HOME,
+    "Contas de Casa": ft.Icons.BOLT,
+    "Transporte": ft.Icons.DIRECTIONS_CAR,
+    "Saúde": ft.Icons.FAVORITE,
+    "Educação": ft.Icons.SCHOOL,
+    "Lazer": ft.Icons.MOVIE,
+    "Assinaturas": ft.Icons.SUBSCRIPTIONS,
+    "Compras": ft.Icons.SHOPPING_BAG,
+    "Dívidas": ft.Icons.CREDIT_CARD,
+    "Investimentos": ft.Icons.SAVINGS,
+}
+FILTROS_EXTRATO = {"todos": "Tudo", "Saída": "Gastos", "Entrada": "Entradas", "Conta": "Contas fixas"}
+DIAS_SEMANA = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+
 # Períodos dos gráficos: a chave é usada no código, o texto aparece no seletor
-PERIODOS_PIZZA = {"mes": "Este mês", "semana": "Esta semana", "dia": "Hoje"}
+PERIODOS_PIZZA = {"passado": "Mês passado", "mes": "Este mês", "semana": "Esta semana", "dia": "Hoje"}
 PERIODOS_BARRAS = {"mes": "Por mês", "semana": "Por semana", "dia": "Por dia"}
 
 SUGESTOES_CHAT = [
@@ -73,6 +95,29 @@ def Main(page: ft.Page):
     dataxlsx = os.path.join(BASE_DIR, "data.xlsx")
 
     df = carregar_planilha(dataxlsx)
+
+    # O chat e a análise rodam em threads, e os cliques também. Sem a trava, uma thread podia enviar a tela
+    # no meio da reconstrução da tabela feita por outra (erro "columns must contain at minimum one visible
+    # DataColumn"). Toda troca da planilha, reconstrução de tela e page.update() passa por ela
+    trava = threading.RLock()
+    # Fila do chat: a IA processa uma mensagem por vez
+    fila_ia = threading.Lock()
+
+    def atualizar(*controles):
+        # Com controles, envia só eles: page.update() recalcula a página toda (inclusive a tabela de
+        # lançamentos) e fica lento; o chat só precisa atualizar a lista de mensagens
+        with trava:
+            if controles:
+                for controle in controles:
+                    controle.update()
+            else:
+                page.update()
+
+    def com_trava(funcao):
+        def envolvida(*args, **kwargs):
+            with trava:
+                return funcao(*args, **kwargs)
+        return envolvida
 
     fonte = 15
     page.window.full_screen = False
@@ -122,31 +167,12 @@ def Main(page: ft.Page):
             raise PermissionError("Feche o data.xlsx no Excel para que o FinancIA consiga salvar.")
 
     def registros():
-        # Apenas as linhas que são transações de verdade, com colunas auxiliares já convertidas
-        tabela = df[df["Descrição"].astype(str).str.strip() != ""].copy()
-        tabela["_data"] = pd.to_datetime(tabela["Data do registro"], format="%d/%m/%Y", errors="coerce")
-        tabela["_valor"] = tabela["Valor"].apply(numero)
-        tabela["_tipo"] = tabela["Tipo"].astype(str).str.strip()
-        tabela["_categoria"] = tabela["Categoria"].astype(str).str.strip().replace("", "Outros")
-        return tabela
+        return preparar_registros(df)
 
-    def eh_investimento(tabela):
-        return tabela["_tipo"].isin(TIPOS_DESPESA) & (tabela["_categoria"] == CATEGORIA_INVESTIMENTO)
-
-    def eh_despesa(tabela):
-        # Dinheiro investido sai da conta, mas não é gasto: ele aparece separado
-        return tabela["_tipo"].isin(TIPOS_DESPESA) & (tabela["_categoria"] != CATEGORIA_INVESTIMENTO)
-
-    def totais(tabela, incluir_salario):
-        # (entradas, despesas, investido) de um recorte da tabela
-        entradas = tabela.loc[tabela["_tipo"] == "Entrada", "_valor"].sum()
-        # Se o salário já foi lançado pelo chat, não soma de novo
-        salario_lancado = ((tabela["_tipo"] == "Entrada") & (tabela["_categoria"] == CATEGORIA_SALARIO)).any()
-        if incluir_salario and not salario_lancado:
-            entradas += numero(df.loc[0, "Salário"])
-        despesas = tabela.loc[eh_despesa(tabela), "_valor"].sum()
-        investido = tabela.loc[eh_investimento(tabela), "_valor"].sum()
-        return float(entradas), float(despesas), float(investido)
+    def totais(tabela, meses_salario=()):
+        # (entradas, despesas, investido); o salário de cada mês em meses_salario entra nas entradas
+        # com o valor que ele tinha naquele mês
+        return calcular_totais(tabela, historico_salario(df), meses_salario)
 
     def registros_do_mes(tabela, ano, mes):
         return tabela[(tabela["_data"].dt.year == ano) & (tabela["_data"].dt.month == mes)]
@@ -154,7 +180,8 @@ def Main(page: ft.Page):
     def calcular_resumo():
         hoje = datetime.now()
         tabela = registros()
-        receitas, despesas, investido = totais(registros_do_mes(tabela, hoje.year, hoje.month), True)
+        receitas, despesas, investido = totais(registros_do_mes(tabela, hoje.year, hoje.month),
+                                               [(hoje.year, hoje.month)])
 
         return {
             "salario": numero(df.loc[0, "Salário"]),
@@ -168,19 +195,60 @@ def Main(page: ft.Page):
             "saldo": receitas - despesas - investido,
         }
 
-    def calcular_metas(dados):
-        # Reserva = 6 salários, Viver de Renda = 120 salários, Aporte = 20% do salário
-        salario = numero(dados.loc[0, "Salário"])
-        dados.loc[0, "Reserva de Emergência"] = salario * 6
-        dados.loc[0, "Viver de Renda"] = salario * 120
-        dados.loc[0, "Aporte Mensal"] = round(salario * 0.2, 2)
+    def somar_meses(data, meses):
+        # Mesmo dia N meses depois; se o mês não tiver esse dia (ex: 31), usa o último dia do mês
+        indice = data.month - 1 + meses
+        ano, mes = data.year + indice // 12, indice % 12 + 1
+        return pd.Timestamp(ano, mes, min(data.day, calendar.monthrange(ano, mes)[1]))
 
+    def hoje_sem_hora():
+        return pd.Timestamp(datetime.now().date())
+
+    def calcular_vencimentos():
+        # Devolve (próxima conta a vencer, conta vencida em aberto, quantas estão vencidas em aberto)
+        hoje = hoje_sem_hora()
+        tabela = registros()
+        contas = tabela[(tabela["_tipo"] == "Conta")].dropna(subset=["_vencimento"]).copy()
+        if contas.empty:
+            return None, None, 0
+
+        def resumo_conta(conta, vencimento, estimada=False):
+            return {"descricao": str(conta["Descrição"]).strip(), "valor": conta["_valor"],
+                    "vencimento": vencimento, "dias": (vencimento - hoje).days, "estimada": estimada}
+
+        # Vencida: conta não paga cujo vencimento já passou (a mais recente delas)
+        atrasadas = contas[~contas["_pago"] & (contas["_vencimento"] < hoje)]
+        vencida = None
+        if not atrasadas.empty:
+            conta = atrasadas.loc[atrasadas["_vencimento"].idxmax()]
+            vencida = resumo_conta(conta, conta["_vencimento"])
+
+        # Próxima: olha o último lançamento de cada conta. Se ele ainda não foi pago e não venceu, é ele.
+        # Se já foi pago ou já venceu, e a conta continua ativa (vista nos últimos ~2 meses),
+        # considera que ela se repete e estima o vencimento do mês seguinte.
+        contas["_nome"] = contas["Descrição"].astype(str).str.strip().str.lower()
+        ultimas = contas.sort_values("_vencimento").groupby("_nome").tail(1)
+        candidatas = []
+        for _, conta in ultimas.iterrows():
+            vencimento = conta["_vencimento"]
+            if not conta["_pago"] and vencimento >= hoje:
+                candidatas.append(resumo_conta(conta, vencimento))
+            elif (hoje - vencimento).days <= 62:
+                meses = 1
+                while somar_meses(vencimento, meses) < hoje:
+                    meses += 1
+                candidatas.append(resumo_conta(conta, somar_meses(vencimento, meses), estimada=True))
+        proxima = min(candidatas, key=lambda c: c["vencimento"]) if candidatas else None
+        return proxima, vencida, len(atrasadas)
+
+    @com_trava
     def aplicar_alteracao(novo_df):
         # Salva primeiro: a tela só muda se o arquivo também mudou
         nonlocal df
         salvar_planilha(novo_df)
         df = novo_df
         recarregar_tabela()
+        recarregar_extrato()
         atualizar_informacoes()
 
     def avisar(texto, cor=VERDE, ao_desfazer=None):
@@ -206,7 +274,7 @@ def Main(page: ft.Page):
             except PermissionError as erro:
                 avisar(str(erro), VERMELHO)
                 return False
-            page.update()
+            atualizar()
             return True
         return desfazer
 
@@ -231,10 +299,8 @@ def Main(page: ft.Page):
             if valor_convertido < 0:
                 raise ValueError
 
-            novo_df = df.copy()
-            novo_df.loc[0, "Salário"] = valor_convertido
-            calcular_metas(novo_df)
-            aplicar_alteracao(novo_df)
+            with trava:
+                aplicar_alteracao(definir_salario(df, valor_convertido))
 
             campo_salario.value = ""
             campo_salario.error_text = None
@@ -246,7 +312,7 @@ def Main(page: ft.Page):
             campo_salario.error_text = "Digite um número válido, ex.: 3500 ou 3.500,00"
         except PermissionError as erro:
             campo_salario.error_text = str(erro)
-        page.update()
+        atualizar()
 
     campo_salario = ft.TextField(label="Seu salário mensal (R$)", hint_text="Ex.: 3.500,00", expand=True,
                                  color=ft.Colors.WHITE, on_submit=salvar_salario,
@@ -262,14 +328,14 @@ def Main(page: ft.Page):
         campo_salario.value = f"{salario_atual:.2f}".replace(".", ",") if salario_atual > 0 else ""
         campo_salario.error_text = None
         atualizar_area_salario()
-        page.update()
+        atualizar()
         campo_salario.focus()
 
     def cancelar_salario(e=None):
         nonlocal editando_salario
         editando_salario = False
         atualizar_area_salario()
-        page.update()
+        atualizar()
 
     def formulario_salario():
         return ft.Container(
@@ -350,6 +416,7 @@ def Main(page: ft.Page):
             border_radius=14,
             padding=ft.Padding.symmetric(horizontal=18),
             ink=True,
+            tooltip=texto,
             on_click=lambda e: mostrar_visao(nome),
             on_hover=hover_nav,
             animate=ft.Animation(200, ft.AnimationCurve.EASE_OUT),
@@ -357,12 +424,16 @@ def Main(page: ft.Page):
         botoes_nav[nome] = botao
         return botao
 
+    titulos_menu = []
+
     def titulo_secao(texto):
-        return ft.Container(
+        titulo = ft.Container(
             ft.Text(texto, size=fonte, weight="W_500", color=TEXTO_TERCIARIO),
             padding=ft.Padding.only(left=5),
             margin=ft.Margin.only(top=10),
         )
+        titulos_menu.append(titulo)
+        return titulo
 
     analisando = False
 
@@ -372,15 +443,20 @@ def Main(page: ft.Page):
         if analisando:
             return
         analisando = True
-        estado_analise(True)
-        esconder_boas_vindas()
+        with trava:
+            estado_analise(True)
+            esconder_boas_vindas()
+            mensagem_ia, txt_stream, _ = mensagem("Analisando seus gastos...", user=False)
+            lista_mensagens.controls.append(mensagem_ia)
+        # No celular o chat é uma tela à parte: abre ele para a resposta aparecer
+        if modo_celular and visao_atual != "chat":
+            mostrar_visao("chat")
+        else:
+            atualizar()
 
         def gerar():
             nonlocal analisando
             try:
-                mensagem_ia, txt_stream, _ = mensagem("Analisando seus gastos...", user=False)
-                lista_mensagens.controls.append(mensagem_ia)
-                page.update()
 
                 resumo = calcular_resumo()
                 resposta = Gemma4(f"""
@@ -399,8 +475,9 @@ Registros:
                 digitar(txt_stream, resposta)
             finally:
                 analisando = False
-                estado_analise(False)
-                page.update()
+                with trava:
+                    estado_analise(False)
+                atualizar()
 
         threading.Thread(target=gerar, daemon=True).start()
 
@@ -413,6 +490,7 @@ Registros:
         icone_analise.content = (ft.ProgressRing(width=20, height=20, stroke_width=2.5, color=ft.Colors.WHITE)
                                  if carregando else ft.Icon(ft.Icons.AUTO_AWESOME, color=ft.Colors.WHITE, size=24))
         botao_analise.opacity = 0.7 if carregando else 1
+        botao_analise_chat.disabled = carregando
         coluna_chat.border = ft.Border.all(1.5 if carregando else 1, VERDE if carregando else AZUL_BORDA)
 
     botao_analise = ft.Container(
@@ -429,31 +507,46 @@ Registros:
 
     texto_dica = ft.Text(random.choice(DICAS), size=fonte, color=TEXTO_SECUNDARIO)
 
+    # Partes do menu que somem quando ele fica compacto (só ícones)
+    nome_marca = ft.Column([
+        ft.Text("FinancIA", weight="bold", size=35, color=ft.Colors.WHITE),
+        ft.Text("Seu controle financeiro", size=17, color=TEXTO_SECUNDARIO),
+    ], spacing=-5)
+    linha_marca = ft.Row([
+        ft.Container(
+            ft.Icon(ft.CupertinoIcons.CHART_BAR_ALT_FILL, size=50, color=ft.Colors.WHITE),
+            gradient=ft.LinearGradient(colors=GRADIENTE_VERDE, begin=ft.Alignment.TOP_LEFT, end=ft.Alignment.BOTTOM_RIGHT),
+            border_radius=15,
+            padding=ft.Padding.only(left=7, right=5, top=5, bottom=9)
+        ),
+        nome_marca,
+    ])
+    dica_menu = ft.Container(
+        ft.Row([
+            ft.Icon(ft.Icons.LIGHTBULB_OUTLINE, size=24, color=AMBAR),
+            ft.Column([
+                ft.Text("Dica", size=fonte, weight="bold", color=ft.Colors.WHITE),
+                texto_dica,
+            ], spacing=2, expand=True),
+        ], vertical_alignment=ft.CrossAxisAlignment.START),
+        padding=15,
+        border_radius=12,
+        bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
+    )
+
     coluna_botoes = ft.Container(
     content=ft.Column(
         controls=[
           # Parte de cima: rola em telas pequenas e ocupa o espaço livre
           ft.Column(
             controls=[
-            ft.Container(
-                ft.Row([
-                    ft.Container(
-                        ft.Icon(ft.CupertinoIcons.CHART_BAR_ALT_FILL, size=50, color=ft.Colors.WHITE),
-                        gradient=ft.LinearGradient(colors=GRADIENTE_VERDE, begin=ft.Alignment.TOP_LEFT, end=ft.Alignment.BOTTOM_RIGHT),
-                        border_radius=15,
-                        padding=ft.Padding.only(left=7, right=5, top=5, bottom=9)
-                    ),
-                    ft.Column([
-                        ft.Text("FinancIA", weight="bold", size=35, color=ft.Colors.WHITE),
-                        ft.Text("Seu controle financeiro", size=17, color=TEXTO_SECUNDARIO),
-                    ], spacing=-5)
-                ])
-            ),
+            ft.Container(linha_marca),
 
             ft.Divider(color=AZUL_BORDA), # Linha divisória sutil
 
             titulo_secao("MENU"),
             botao_nav("Visão geral", ft.Icons.DASHBOARD, "informacoes"),
+            botao_nav("Extrato", ft.Icons.VIEW_AGENDA, "extrato"),
             botao_nav("Lançamentos", ft.Icons.RECEIPT_LONG, "planilha"),
 
             titulo_secao("INTELIGÊNCIA ARTIFICIAL"),
@@ -465,18 +558,7 @@ Registros:
           ),
 
             # Parte de baixo: dica discreta (não é clicável, então não parece botão)
-            ft.Container(
-                ft.Row([
-                    ft.Icon(ft.Icons.LIGHTBULB_OUTLINE, size=24, color=AMBAR),
-                    ft.Column([
-                        ft.Text("Dica", size=fonte, weight="bold", color=ft.Colors.WHITE),
-                        texto_dica,
-                    ], spacing=2, expand=True),
-                ], vertical_alignment=ft.CrossAxisAlignment.START),
-                padding=15,
-                border_radius=12,
-                bgcolor=ft.Colors.with_opacity(0.05, ft.Colors.WHITE),
-            )
+            dica_menu,
         ],
     ),
     width=375, # Largura fixa para o menu
@@ -497,20 +579,38 @@ Registros:
                                      data_row_color={ft.ControlState.HOVERED: ft.Colors.with_opacity(0.06, VERDE)})
 
     visao_atual = "informacoes"
+    # No celular só cabe uma tela por vez, e o chat vira uma delas ("chat")
+    modo_celular = False
+    VISOES_CELULAR = ["informacoes", "extrato", "planilha", "chat"]
 
     area_dinamica = ft.Container(expand=True)
     titulo_tela = ft.Text("", size=fonte+15, weight="bold", color=ft.Colors.WHITE)
     subtitulo_tela = ft.Text("", size=fonte+1, color=TEXTO_SECUNDARIO)
 
+    @com_trava
     def mostrar_visao(nome, atualizar_pagina=True):
         nonlocal visao_atual
+        if nome == "chat" and not modo_celular:
+            # Fora do celular o chat já está sempre visível ao lado
+            nome = visao_atual if visao_atual != "chat" else "informacoes"
         visao_atual = nome
 
-        if nome == "planilha":
+        if modo_celular:
+            layout_principal.controls = [coluna_chat if nome == "chat" else tela_central]
+            barra_navegacao.selected_index = VISOES_CELULAR.index(nome)
+
+        if nome == "chat":
+            pass
+        elif nome == "planilha":
             recarregar_tabela()
             area_dinamica.content = planilha
             titulo_tela.value = "Lançamentos"
             subtitulo_tela.value = "Tudo o que você registrou. Para adicionar, escreva no chat ao lado."
+        elif nome == "extrato":
+            recarregar_extrato()
+            area_dinamica.content = tela_extrato
+            titulo_tela.value = "Extrato"
+            subtitulo_tela.value = "Seus lançamentos do mês, organizados por dia."
         else:
             atualizar_informacoes()
             area_dinamica.content = tela_informacoes
@@ -521,7 +621,7 @@ Registros:
             estilo_nav(botao, nome_botao == nome)
 
         if atualizar_pagina:
-            page.update()
+            atualizar()
 
     tela_central = ft.Container(
         ft.Column([
@@ -571,6 +671,16 @@ Registros:
     rotulo_saldo = ft.Text("Sobrou no mês", color=VERDE, weight="bold", size=fonte+4, no_wrap=True)
     legenda_investimentos = ft.Text("", color=TEXTO_TERCIARIO, size=fonte-1, no_wrap=True)
     titulo_resumo = ft.Text("", color=ft.Colors.WHITE, weight="bold", size=25)
+
+    # Contas: próxima a vencer e última vencida (preenchidos por atualizar_informacoes())
+    def texto_nome_conta():
+        return ft.Text("", color=ft.Colors.WHITE, weight="bold", size=fonte+5,
+                       no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS, expand=True)
+
+    nome_proxima, nome_vencida = texto_nome_conta(), texto_nome_conta()
+    valor_proxima, valor_vencida = texto_valor(fonte+5), texto_valor(fonte+5)
+    legenda_proxima = ft.Text("", color=TEXTO_TERCIARIO, size=fonte-1)
+    legenda_vencida = ft.Text("", color=TEXTO_TERCIARIO, size=fonte-1)
 
     # ==========================================
     # GRÁFICOS
@@ -635,7 +745,9 @@ Registros:
             inicio = hoje - timedelta(days=hoje.weekday())
             return inicio, inicio + timedelta(days=7)
         inicio = pd.Timestamp(hoje.year, hoje.month, 1)
-        return inicio, pd.Timestamp(hoje.year + (hoje.month == 12), hoje.month % 12 + 1, 1)
+        if modo == "passado":
+            return somar_meses(inicio, -1), inicio
+        return inicio, somar_meses(inicio, 1)
 
     def periodos_barras(modo):
         # Lista de (rótulo, início, fim), do mais antigo para o atual
@@ -675,7 +787,8 @@ Registros:
         modo = seletor_pizza.value
         inicio, fim = intervalo_atual(modo)
         descricao_periodo = {
-            "mes": f"{NOMES_MESES_COMPLETOS[hoje.month - 1].lower()}",
+            "passado": f"em {NOMES_MESES_COMPLETOS[inicio.month - 1].lower()}",
+            "mes": f"em {NOMES_MESES_COMPLETOS[hoje.month - 1].lower()}",
             "semana": "esta semana",
             "dia": "hoje",
         }[modo]
@@ -686,7 +799,7 @@ Registros:
 
         if gastos.sum() <= 0:
             conteudo_pizza.content = ft.Container(
-                ft.Text(f"Nenhuma despesa registrada {'em ' if modo == 'mes' else ''}{descricao_periodo}.\n"
+                ft.Text(f"Nenhuma despesa registrada {descricao_periodo}.\n"
                         "Escreva no chat, por exemplo: \"gastei 50 no mercado\".",
                         color=TEXTO_TERCIARIO, text_align=ft.TextAlign.CENTER),
                 alignment=ft.Alignment.CENTER,
@@ -739,7 +852,8 @@ Registros:
         rotulos_x = []
         maior_valor = 0
         for indice, (rotulo, inicio, fim) in enumerate(periodos_barras(modo)):
-            entradas, despesas, _ = totais(filtrar_periodo(tabela, inicio, fim), incluir_salario)
+            meses_salario = [(inicio.year, inicio.month)] if incluir_salario else []
+            entradas, despesas, _ = totais(filtrar_periodo(tabela, inicio, fim), meses_salario)
             maior_valor = max(maior_valor, entradas, despesas)
 
             grafico_barras.groups.append(fch.BarChartGroup(
@@ -780,7 +894,7 @@ Registros:
     def mudou_periodo(e):
         atualizar_grafico_pizza()
         atualizar_grafico_barras()
-        page.update()
+        atualizar()
 
     seletor_pizza = criar_seletor_periodo(PERIODOS_PIZZA, mudou_periodo)
     seletor_barras = criar_seletor_periodo(PERIODOS_BARRAS, mudou_periodo)
@@ -789,6 +903,7 @@ Registros:
     def porcentagem(parte, meta):
         return min(parte / meta, 1.0) if meta > 0 else 0.0
 
+    @com_trava
     def atualizar_informacoes():
         resumo = calcular_resumo()
         hoje = datetime.now()
@@ -819,6 +934,31 @@ Registros:
         rotulo_saldo.value = "Sobrou no mês" if positivo else "Faltou no mês"
         rotulo_saldo.color = VERDE if positivo else VERMELHO
 
+        # Contas a vencer / vencida
+        proxima, vencida, qtd_vencidas = calcular_vencimentos()
+        if proxima:
+            dias = proxima["dias"]
+            quando = "vence hoje" if dias == 0 else "vence amanhã" if dias == 1 else f"vence em {dias} dias"
+            nome_proxima.value = proxima["descricao"]
+            valor_proxima.value = moeda(proxima["valor"])
+            legenda_proxima.value = f"{proxima['vencimento']:%d/%m} · {quando}"
+            if proxima["estimada"]:
+                legenda_proxima.value += " · estimada pelo mês anterior"
+        else:
+            nome_proxima.value, valor_proxima.value = "Nenhuma conta à frente", ""
+            legenda_proxima.value = "Registre uma conta fixa pelo chat"
+        if vencida:
+            dias = -vencida["dias"]
+            nome_vencida.value = vencida["descricao"]
+            valor_vencida.value = moeda(vencida["valor"])
+            legenda_vencida.value = (f"{vencida['vencimento']:%d/%m/%Y} · venceu "
+                                     + ("ontem" if dias == 1 else f"há {dias} dias"))
+            if qtd_vencidas > 1:
+                legenda_vencida.value += f" · {qtd_vencidas} contas em aberto"
+        else:
+            nome_vencida.value, valor_vencida.value = "Nenhuma conta vencida", ""
+            legenda_vencida.value = "Tudo pago em dia"
+
         atualizar_area_salario()
         atualizar_grafico_pizza()
         atualizar_grafico_barras()
@@ -837,7 +977,7 @@ Registros:
 
     def mudou_filtro(e):
         recarregar_tabela()
-        page.update()
+        atualizar()
 
     filtro_mes = ft.Dropdown(
         value="todos",
@@ -866,20 +1006,63 @@ Registros:
             botao.tooltip = "Clique de novo para confirmar"
             botao.update()
             return
+        excluir_registro(indice)
 
+    def excluir_registro(indice):
+        # Usado pela tabela de Lançamentos e pelo menu dos cartões do Extrato
         df_anterior = df
         try:
             aplicar_alteracao(remover_registro(df, indice))
         except PermissionError as erro:
             avisar(str(erro), VERMELHO)
-            page.update()
+            atualizar()
             return
         linha = df_anterior.loc[indice]
         desfazer = desfazer_para(df_anterior, df)
         avisar(f"Excluído: {linha['Descrição']} · {moeda(numero(linha['Valor']))}",
                ao_desfazer=lambda e: desfazer() and avisar("Lançamento restaurado."))
-        page.update()
+        atualizar()
 
+    def clicou_pago(e):
+        # Alterna a conta entre paga e não paga
+        indice = e.control.data
+        df_anterior = df
+        novo_df = df.copy()
+        estava_paga = esta_paga(df.loc[indice, COLUNA_PAGO])
+        novo_df.loc[indice, COLUNA_PAGO] = "Não" if estava_paga else "Sim"
+        try:
+            aplicar_alteracao(novo_df)
+        except PermissionError as erro:
+            avisar(str(erro), VERMELHO)
+            atualizar()
+            return
+        desfazer = desfazer_para(df_anterior, df)
+        avisar(f"{df.loc[indice, 'Descrição']} marcada como {'não paga' if estava_paga else 'paga'}.",
+               ao_desfazer=lambda e: desfazer() and avisar("Alteração desfeita."))
+        atualizar()
+
+    def selo_pagamento(linha, indice):
+        # Indicador clicável do status da conta: Paga (verde), Vencida (vermelho) ou A pagar (âmbar)
+        if linha["_pago"]:
+            cor, icone, texto, dica = VERDE, ft.Icons.CHECK_CIRCLE, "Paga", "Clique para marcar como não paga"
+        elif pd.notna(linha["_vencimento"]) and linha["_vencimento"] < hoje_sem_hora():
+            cor, icone, texto, dica = VERMELHO, ft.Icons.ERROR_OUTLINE, "Vencida", "Clique para marcar como paga"
+        else:
+            cor, icone, texto, dica = AMBAR, ft.Icons.SCHEDULE, "A pagar", "Clique para marcar como paga"
+        return ft.Container(
+            ft.Row([ft.Icon(icone, size=16, color=cor), ft.Text(texto, color=cor, weight="bold", size=fonte-1)],
+                   spacing=4, tight=True),
+            bgcolor=ft.Colors.with_opacity(0.14, cor),
+            border=ft.Border.all(1, ft.Colors.with_opacity(0.35, cor)),
+            border_radius=10,
+            padding=ft.Padding.only(left=8, right=10, top=4, bottom=4),
+            tooltip=dica,
+            ink=True,
+            data=indice,
+            on_click=clicou_pago,
+        )
+
+    @com_trava
     def recarregar_tabela():
         tabela = tabela_financeira
         tabela.columns.clear()
@@ -944,6 +1127,13 @@ Registros:
                             padding=ft.Padding.only(left=10, right=10, top=5, bottom=5)
                         )
                     ))
+
+                elif coluna == "Dia de Pagamento" and tipo_da_linha == "Conta":
+                    texto = str(valor).strip() or "—"
+                    linhas_celulas.append(ft.DataCell(ft.Row([
+                        ft.Text(texto, color=ft.Colors.WHITE, weight="W_600"),
+                        selo_pagamento(linha, indice),
+                    ], spacing=10, tight=True)))
                 else:
                     texto = str(valor).strip() or "—"
                     linhas_celulas.append(ft.DataCell(ft.Text(texto, color=ft.Colors.WHITE, weight="W_600")))
@@ -979,13 +1169,290 @@ Registros:
     )
 
     # ==========================================
+    # EXTRATO (lançamentos em cartões, um mês por vez)
+    # ==========================================
+    mes_extrato = None       # (ano, mês) exibido; escolhido na primeira carga
+    filtro_extrato = "todos"  # chave de FILTROS_EXTRATO
+
+    texto_mes_extrato = ft.Text("", size=fonte+5, weight="bold", color=ft.Colors.WHITE,
+                                width=230, text_align=ft.TextAlign.CENTER, no_wrap=True)
+
+    def mudar_mes_extrato(e):
+        nonlocal mes_extrato
+        if e.control.data is None:
+            return
+        mes_extrato = e.control.data
+        recarregar_extrato()
+        atualizar()
+
+    def botao_mes(icone, dica):
+        return ft.IconButton(icon=icone, icon_color=ft.Colors.WHITE, icon_size=26, tooltip=dica,
+                             on_click=mudar_mes_extrato,
+                             style=ft.ButtonStyle(bgcolor={ft.ControlState.DEFAULT: AZUL_ELEVADO,
+                                                           ft.ControlState.DISABLED: ft.Colors.TRANSPARENT}))
+
+    botao_mes_anterior = botao_mes(ft.Icons.CHEVRON_LEFT, "Mês anterior")
+    botao_mes_seguinte = botao_mes(ft.Icons.CHEVRON_RIGHT, "Próximo mês")
+
+    def escolher_filtro_extrato(chave):
+        nonlocal filtro_extrato
+        filtro_extrato = chave
+        recarregar_extrato()
+        atualizar()
+
+    chips_filtro = {}
+    for chave_filtro, texto_filtro in FILTROS_EXTRATO.items():
+        chips_filtro[chave_filtro] = ft.Container(
+            ft.Text(texto_filtro, size=fonte, weight="bold"),
+            border_radius=20,
+            padding=ft.Padding.symmetric(horizontal=16, vertical=8),
+            ink=True,
+            on_click=lambda e, chave=chave_filtro: escolher_filtro_extrato(chave),
+            animate=ft.Animation(150, ft.AnimationCurve.EASE_OUT),
+        )
+
+    def estilo_chips_filtro():
+        for chave, chip in chips_filtro.items():
+            selecionado = chave == filtro_extrato
+            chip.bgcolor = ft.Colors.with_opacity(0.16, VERDE) if selecionado else AZUL_ELEVADO
+            chip.border = ft.Border.all(1, VERDE if selecionado else AZUL_BORDA)
+            chip.content.color = ft.Colors.WHITE if selecionado else TEXTO_SECUNDARIO
+
+    # Resumo do mês exibido: entrou, saiu e contas que ainda faltam pagar
+    valor_entrou, valor_saiu, valor_abertas = texto_valor(fonte+9), texto_valor(fonte+9), texto_valor(fonte+9)
+    legenda_entrou = ft.Text("", color=TEXTO_TERCIARIO, size=fonte-1, no_wrap=True)
+    legenda_saiu = ft.Text("", color=TEXTO_TERCIARIO, size=fonte-1, no_wrap=True)
+    legenda_abertas = ft.Text("", color=TEXTO_TERCIARIO, size=fonte-1, no_wrap=True)
+
+    def card_resumo_extrato(icone, titulo, cor, valor, legenda, ao_clicar=None, dica=None):
+        return ft.Container(
+            ft.Row([
+                ft.Container(ft.Icon(icone, size=28, color=cor), bgcolor=ft.Colors.with_opacity(0.12, cor),
+                             border_radius=14, padding=10),
+                ft.Column([ft.Text(titulo, color=TEXTO_SECUNDARIO, size=fonte+1, no_wrap=True), valor, legenda],
+                          spacing=0, expand=True),
+            ], spacing=14),
+            bgcolor=AZUL_CARTAO,
+            border=ft.Border.all(1, AZUL_BORDA),
+            border_radius=15,
+            padding=16,
+            col={"xs": 12, "md": 4},
+            ink=ao_clicar is not None,
+            on_click=ao_clicar,
+            tooltip=dica,
+        )
+
+    resumo_extrato = ft.ResponsiveRow([
+        card_resumo_extrato(ft.Icons.ARROW_CIRCLE_DOWN, "Entrou", VERDE, valor_entrou, legenda_entrou),
+        card_resumo_extrato(ft.Icons.ARROW_CIRCLE_UP, "Saiu", VERMELHO, valor_saiu, legenda_saiu),
+        card_resumo_extrato(ft.Icons.PENDING_ACTIONS, "Contas a pagar", AMBAR, valor_abertas, legenda_abertas,
+                            ao_clicar=lambda e: escolher_filtro_extrato("Conta"),
+                            dica="Ver só as contas fixas"),
+    ], spacing=12, run_spacing=12)
+
+    lista_extrato = ft.Column(spacing=8)
+
+    def plural(quantidade, singular, plural_):
+        return f"{quantidade} {singular if quantidade == 1 else plural_}"
+
+    def rotulo_dia(data):
+        hoje = hoje_sem_hora()
+        if data == hoje:
+            return "Hoje"
+        if data == hoje - timedelta(days=1):
+            return "Ontem"
+        return f"{DIAS_SEMANA[data.weekday()]}, {data.day} de {NOMES_MESES_COMPLETOS[data.month - 1].lower()}"
+
+    def hover_card(e):
+        e.control.border = ft.Border.all(1, ft.Colors.with_opacity(0.6, VERDE) if e.data == True else AZUL_BORDA)
+        e.control.update()
+
+    def chip_tipo(tipo):
+        cor = COR_TIPO.get(tipo, TEXTO_SECUNDARIO)
+        return ft.Container(
+            ft.Text(ROTULO_TIPO.get(tipo, tipo or "—"), color=cor, weight="bold", size=fonte-1),
+            bgcolor=ft.Colors.with_opacity(0.14, cor),
+            border_radius=10,
+            padding=ft.Padding.only(left=10, right=10, top=4, bottom=4),
+        )
+
+    def card_lancamento(indice, linha):
+        tipo = linha["_tipo"]
+        cor = COR_TIPO.get(tipo, TEXTO_SECUNDARIO)
+        categoria = linha["_categoria"]
+        conta = tipo == "Conta"
+
+        detalhe = categoria
+        if conta:
+            vencimento = linha["_vencimento"]
+            detalhe += f" · vence {vencimento:%d/%m}" if pd.notna(vencimento) else " · sem vencimento"
+
+        menu = ft.PopupMenuButton(
+            icon=ft.Icons.MORE_VERT,
+            icon_color=TEXTO_TERCIARIO,
+            icon_size=20,
+            tooltip="Mais opções",
+            bgcolor=AZUL_ELEVADO,
+            items=[ft.PopupMenuItem(
+                content=ft.Text("Excluir lançamento", color=ft.Colors.WHITE),
+                icon=ft.Icon(ft.Icons.DELETE_OUTLINE, color=VERMELHO),
+                on_click=lambda e: excluir_registro(indice),
+            )],
+        )
+
+        return ft.Container(
+            ft.Column([
+                ft.Row([
+                    ft.Container(
+                        ft.Icon(ICONE_CATEGORIA.get(categoria, ft.Icons.CATEGORY), size=24, color=cor),
+                        bgcolor=ft.Colors.with_opacity(0.14, cor),
+                        border_radius=12,
+                        width=46,
+                        height=46,
+                        alignment=ft.Alignment.CENTER,
+                    ),
+                    ft.Column([
+                        ft.Text(str(linha["Descrição"]).strip(), size=fonte+2, weight="bold", color=ft.Colors.WHITE,
+                                no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS),
+                        ft.Text(detalhe, size=fonte-1, color=TEXTO_TERCIARIO,
+                                no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS),
+                    ], spacing=0, expand=True),
+                    menu,
+                ], spacing=12, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                ft.Row([
+                    # Só o que entra fica verde; o que sai fica branco para a tela não ficar toda vermelha
+                    ft.Text(("+ " if tipo == "Entrada" else "− ") + moeda(linha["_valor"]),
+                            size=fonte+7, weight="bold", no_wrap=True,
+                            color=VERDE if tipo == "Entrada" else ft.Colors.WHITE),
+                    selo_pagamento(linha, indice) if conta else chip_tipo(tipo),
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            ], spacing=12),
+            bgcolor=AZUL_CARTAO,
+            border=ft.Border.all(1, AZUL_BORDA),
+            border_radius=15,
+            padding=ft.Padding.only(left=16, right=6, top=14, bottom=14),
+            col={"xs": 12, "md": 6, "xxl": 4},
+            on_hover=hover_card,
+        )
+
+    def aviso_vazio(icone, titulo, texto):
+        return ft.Container(
+            ft.Column([
+                ft.Icon(icone, size=50, color=TEXTO_TERCIARIO),
+                ft.Text(titulo, size=fonte+3, color=ft.Colors.WHITE, weight="bold", text_align=ft.TextAlign.CENTER),
+                ft.Text(texto, color=TEXTO_SECUNDARIO, text_align=ft.TextAlign.CENTER),
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=8),
+            alignment=ft.Alignment.CENTER,
+            padding=50,
+        )
+
+    @com_trava
+    def recarregar_extrato():
+        nonlocal mes_extrato
+        tabela = registros()
+        hoje = datetime.now()
+        mes_de_hoje = (hoje.year, hoje.month)
+        com_registro = sorted({(d.year, d.month) for d in tabela["_data"].dropna()})
+
+        # Abre no mês atual; se ele ainda não tem nada, abre no último mês com lançamentos
+        if mes_extrato is None:
+            mes_extrato = mes_de_hoje if mes_de_hoje in com_registro or not com_registro else com_registro[-1]
+
+        # Dá para navegar pelos meses com lançamentos e pelo mês atual. O mês exibido continua na lista
+        # mesmo que seu último lançamento seja excluído, para a tela não pular sozinha
+        navegaveis = sorted(set(com_registro) | {mes_de_hoje, mes_extrato})
+        posicao = navegaveis.index(mes_extrato)
+        botao_mes_anterior.data = navegaveis[posicao - 1] if posicao > 0 else None
+        botao_mes_seguinte.data = navegaveis[posicao + 1] if posicao < len(navegaveis) - 1 else None
+        botao_mes_anterior.disabled = botao_mes_anterior.data is None
+        botao_mes_seguinte.disabled = botao_mes_seguinte.data is None
+
+        ano, mes = mes_extrato
+        nome_mes = NOMES_MESES_COMPLETOS[mes - 1]
+        texto_mes_extrato.value = f"{nome_mes} de {ano}"
+        estilo_chips_filtro()
+
+        # Resumo: sempre do mês inteiro, independente do filtro
+        do_mes = registros_do_mes(tabela, ano, mes)
+        entradas = do_mes[do_mes["_tipo"] == "Entrada"]
+        saidas = do_mes[do_mes["_tipo"].isin(TIPOS_DESPESA)]
+        investido = float(do_mes.loc[eh_investimento(do_mes), "_valor"].sum())
+        abertas = do_mes[(do_mes["_tipo"] == "Conta") & ~do_mes["_pago"]]
+
+        # Mesma conta da Visão geral: o salário configurado entra se ainda não foi lançado no mês
+        total_entradas = totais(do_mes, [(ano, mes)])[0]
+        salario_somado = total_entradas - float(entradas["_valor"].sum())
+        valor_entrou.value = moeda(total_entradas)
+        legenda_entrou.value = plural(len(entradas), "entrada", "entradas")
+        if salario_somado > 0:
+            legenda_entrou.value = (f"Salário + {legenda_entrou.value}" if len(entradas) else "Salário do mês")
+        valor_saiu.value = moeda(float(saidas["_valor"].sum()))
+        legenda_saiu.value = (f"Inclui {moeda(investido)} investidos" if investido > 0
+                              else plural(len(saidas), "gasto ou conta", "gastos e contas"))
+        valor_abertas.value = moeda(float(abertas["_valor"].sum()))
+        valor_abertas.color = AMBAR if len(abertas) else ft.Colors.WHITE
+        legenda_abertas.value = plural(len(abertas), "conta em aberto", "contas em aberto") if len(abertas) else "Tudo pago"
+
+        # Cartões agrupados por dia, do mais recente para o mais antigo
+        dados = do_mes if filtro_extrato == "todos" else do_mes[do_mes["_tipo"] == filtro_extrato]
+        lista_extrato.controls = []
+        if dados.empty:
+            if do_mes.empty:
+                lista_extrato.controls.append(aviso_vazio(
+                    ft.Icons.EVENT_NOTE, f"Nenhum lançamento em {nome_mes.lower()}.",
+                    "Escreva no chat ao lado, por exemplo: \"gastei 50 no mercado hoje\"."))
+            else:
+                lista_extrato.controls.append(aviso_vazio(
+                    ft.Icons.FILTER_LIST_OFF, f"Nenhum lançamento de \"{FILTROS_EXTRATO[filtro_extrato]}\" neste mês.",
+                    "Escolha \"Tudo\" para ver todos os lançamentos."))
+            return
+
+        # Dentro do mesmo dia, o que foi registrado por último aparece primeiro
+        dados = dados.assign(_ordem=dados.index).sort_values(["_data", "_ordem"], ascending=False)
+        for dia, do_dia in dados.groupby("_data", sort=False):
+            saldo_dia = (do_dia.loc[do_dia["_tipo"] == "Entrada", "_valor"].sum()
+                         - do_dia.loc[do_dia["_tipo"] != "Entrada", "_valor"].sum())
+            lista_extrato.controls.append(ft.Container(
+                ft.Row([
+                    ft.Text(rotulo_dia(dia), size=fonte+2, weight="bold", color=ft.Colors.WHITE),
+                    ft.Text(f"{'+' if saldo_dia >= 0 else '−'} {moeda(abs(float(saldo_dia)))} no dia",
+                            size=fonte, color=TEXTO_TERCIARIO),
+                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                padding=ft.Padding.only(left=4, right=4, top=10),
+            ))
+            lista_extrato.controls.append(ft.ResponsiveRow(
+                [card_lancamento(indice, linha) for indice, linha in do_dia.iterrows()],
+                spacing=12, run_spacing=12,
+            ))
+
+    tela_extrato = ft.Container(
+        content=ft.Column([
+            # Barra fixa: mês exibido e filtro por tipo
+            ft.Row([
+                ft.Row([botao_mes_anterior, texto_mes_extrato, botao_mes_seguinte], spacing=4, tight=True),
+                ft.Row(list(chips_filtro.values()), spacing=8, wrap=True, tight=True),
+            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN, wrap=True, run_spacing=10,
+               vertical_alignment=ft.CrossAxisAlignment.CENTER),
+            # Resumo e cartões rolam juntos
+            ft.Column([resumo_extrato, lista_extrato], spacing=12, expand=True, scroll=ft.ScrollMode.ADAPTIVE),
+        ], spacing=14, expand=True),
+        expand=True,
+        padding=ft.Padding.only(left=10, right=10, top=5),
+    )
+
+    # ==========================================
     # VISÃO GERAL
     # ==========================================
+    # Cartões com altura fixa (para ficarem alinhados lado a lado); no celular eles crescem com o texto
+    cards_altura_fixa = []
+    # Cabe título em duas linhas + valor + barra + legenda em duas linhas
+    ALTURA_CARD_META = 175
+
     def card_meta(icone, titulo, valor, legenda, progresso=None, acao=None):
         cabecalho = [ft.Text(titulo, color=TEXTO_SECUNDARIO, size=18, expand=True)]
         if acao:
             cabecalho.append(acao)
-        return ft.Container(
+        cartao = ft.Container(
             ft.Row([
                 ft.Container(
                     ft.Icon(icone, size=40, color=VERDE),
@@ -1005,9 +1472,11 @@ Registros:
             border=ft.Border.all(1, AZUL_BORDA),
             border_radius=15,
             padding=20,
-            height=150,
-            expand=True
+            height=ALTURA_CARD_META,
+            col={"xs": 12, "lg": 6},
         )
+        cards_altura_fixa.append((cartao, ALTURA_CARD_META))
+        return cartao
 
     def bloco_resumo(titulo, cor, valor, legenda):
         return ft.Container(
@@ -1022,13 +1491,39 @@ Registros:
     def divisoria():
         return ft.Container(bgcolor=AZUL_BORDA, height=70, width=1)
 
+    def card_conta(icone, titulo, cor, nome, valor, legenda):
+        cartao = ft.Container(
+            ft.Row([
+                ft.Container(
+                    ft.Icon(icone, size=40, color=cor),
+                    bgcolor=ft.Colors.with_opacity(0.12, cor),
+                    border_radius=18,
+                    padding=12,
+                ),
+                ft.Column([
+                    ft.Text(titulo, color=TEXTO_SECUNDARIO, size=18),
+                    ft.Row([nome, valor], vertical_alignment=ft.CrossAxisAlignment.CENTER),
+                    legenda,
+                ], spacing=4, expand=True, alignment=ft.MainAxisAlignment.CENTER),
+            ], spacing=16),
+            bgcolor=AZUL_CARTAO,
+            border=ft.Border.all(1, AZUL_BORDA),
+            border_radius=15,
+            padding=20,
+            height=130,
+            col={"xs": 12, "lg": 6},
+        )
+        cards_altura_fixa.append((cartao, 130))
+        return cartao
+
     botao_editar_salario = ft.IconButton(icon=ft.Icons.EDIT, icon_color=VERDE, icon_size=20,
                                          tooltip="Editar salário", on_click=editar_salario)
     card_salario = card_meta(ft.Icons.WALLET, "Salário", texto_salario,
                              ft.Text("Receita principal", color=TEXTO_TERCIARIO, size=fonte-1),
                              acao=botao_editar_salario)
     # Espaço do card de Salário: vira o formulário enquanto o salário é editado
-    espaco_card_salario = ft.Container(card_salario, expand=True, height=150)
+    espaco_card_salario = ft.Container(card_salario, height=ALTURA_CARD_META, col={"xs": 12, "lg": 6})
+    cards_altura_fixa.append((espaco_card_salario, ALTURA_CARD_META))
 
     tela_informacoes = ft.Container(
         content=ft.Column(
@@ -1075,21 +1570,33 @@ Registros:
                     ])
                 ),
 
-                ft.Row(
-                    alignment=ft.MainAxisAlignment.CENTER,
+                # Contas: a próxima a vencer e a última que já venceu
+                # Lado a lado em telas largas, um embaixo do outro nas estreitas
+                ft.ResponsiveRow([
+                    card_conta(ft.Icons.EVENT, "Próxima conta a vencer", AMBAR,
+                               nome_proxima, valor_proxima, legenda_proxima),
+                    card_conta(ft.Icons.EVENT_BUSY, "Conta vencida não paga", VERMELHO,
+                               nome_vencida, valor_vencida, legenda_vencida),
+                ], spacing=10, run_spacing=10),
+
+                ft.ResponsiveRow(
+                    spacing=10,
+                    run_spacing=10,
                     controls=[
                         # Gráfico de pizza: despesas do período por categoria
                         ft.Container(
                             bgcolor=AZUL_CARTAO,
                             border=ft.Border.all(1, AZUL_BORDA),
-                            height=320,
-                            expand=5,
+                            height=340,
+                            col={"xs": 12, "xxl": 6},
                             border_radius=15,
                             padding=20,
                             content=ft.Column([
                                 ft.Row(
                                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                    wrap=True,
+                                    run_spacing=8,
                                     controls=[
                                         ft.Row([ft.Icon(ft.Icons.PIE_CHART, size=26, color=VERDE),
                                                 ft.Text("Despesas por categoria", color=ft.Colors.WHITE, weight="bold", size=20)]),
@@ -1103,14 +1610,16 @@ Registros:
                         ft.Container(
                             bgcolor=AZUL_CARTAO,
                             border=ft.Border.all(1, AZUL_BORDA),
-                            height=320,
-                            expand=6,
+                            height=340,
+                            col={"xs": 12, "xxl": 6},
                             border_radius=15,
                             padding=20,
                             content=ft.Column([
                                 ft.Row(
                                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                                     vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                                    wrap=True,
+                                    run_spacing=8,
                                     controls=[
                                         ft.Row([
                                             ft.Icon(ft.Icons.BAR_CHART, size=26, color=VERDE),
@@ -1136,20 +1645,18 @@ Registros:
                         ft.Icon(ft.Icons.FLAG, size=30, color=VERDE),
                         ft.Text("Suas metas", color=ft.Colors.WHITE, weight="bold", size=25),
                         ft.Text("calculadas a partir do seu salário", color=TEXTO_TERCIARIO, size=fonte),
-                    ], vertical_alignment=ft.CrossAxisAlignment.END),
+                    ], vertical_alignment=ft.CrossAxisAlignment.END, wrap=True),
                     padding=ft.Padding.only(left=5, top=10),
                 ),
-                ft.Row([
+                ft.ResponsiveRow([
                     espaco_card_salario,
                     card_meta(ft.Icons.SHOW_CHART, "Meta de investimento mensal", texto_aporte,
                               legenda_aporte, progresso_aporte),
-                ]),
-                ft.Row([
                     card_meta(ft.Icons.SHIELD, "Meta de reserva de emergência", texto_reserva,
                               legenda_reserva, progresso_reserva),
                     card_meta(ft.Icons.SAVINGS, "Meta para viver de renda", texto_renda,
                               legenda_renda, progresso_renda),
-                ]),
+                ], spacing=10, run_spacing=10),
             ]
         )
     )
@@ -1180,13 +1687,14 @@ Registros:
         return row, texto_control, conteudo
 
     def digitar(txt_stream, texto: str, cor=ft.Colors.WHITE):
-        # Efeito de digitação, letra por letra
-        txt_stream.value = ""
+        # Efeito de digitação em no máximo ~60 etapas: atualizar a tela a cada letra deixava respostas
+        # longas levando quase um minuto para aparecer
         txt_stream.color = cor
-        for char in texto:
-            txt_stream.value += char
-            page.update()
-            sleep(.01)
+        passo = max(1, len(texto) // 60)
+        for fim in range(passo, len(texto) + passo, passo):
+            txt_stream.value = texto[:fim]
+            atualizar(lista_mensagens)
+            sleep(.02)
 
     def chip_sugestao(texto):   
         return ft.Container(
@@ -1239,7 +1747,7 @@ Registros:
         def clicou(e):
             if desfazer():
                 conteudo.controls[-1] = ft.Text("Desfeito.", color=TEXTO_TERCIARIO, size=fonte)
-                page.update()
+                atualizar()
         conteudo.controls.append(ft.TextButton("Desfazer", icon=ft.Icons.UNDO, on_click=clicou,
                                                style=ft.ButtonStyle(color=VERDE, padding=0)))
 
@@ -1247,35 +1755,57 @@ Registros:
         texto_usuario = texto_usuario.strip()
         if texto_usuario == "":
             return
-        esconder_boas_vindas()
-        # Adiciona o texto na lista de mensagens
-        lista_mensagens.controls.append(mensagem(texto_usuario)[0])
-        campo_mensagem.value = ""
-        page.update()
-
-        def processar_ia():
-            sleep(.2) # Pequeno atraso estético
-
+        with trava:
+            esconder_boas_vindas()
+            # Adiciona o texto e o balão de resposta na lista de mensagens
+            lista_mensagens.controls.append(mensagem(texto_usuario)[0])
             mensagem_ia, txt_stream, conteudo = mensagem("Processando...", user=False)
             lista_mensagens.controls.append(mensagem_ia)
-            page.update()
+            if fila_ia.locked():
+                txt_stream.value = "Aguardando a mensagem anterior..."
+            campo_mensagem.value = ""
+        if modo_celular and visao_atual != "chat":
+            mostrar_visao("chat")
+        else:
+            atualizar(lista_mensagens, campo_mensagem)
 
-            try:
-                df_anterior = df
-                novo_df, acao, mensagem_chat = registerData(df, texto_usuario)
+        def processar_ia():
+            # Uma mensagem por vez: duas ao mesmo tempo partiriam da mesma planilha
+            with fila_ia:
+                txt_stream.value = "Processando..."
+                atualizar(lista_mensagens)
+                try:
+                    # A IA (lenta) lê uma cópia da planilha; a resposta é aplicada sobre a planilha atual,
+                    # para não desfazer o que a pessoa mudou na tela enquanto esperava
+                    resposta, erro = interpretar_mensagem(df, texto_usuario)
+                    if erro:
+                        digitar(txt_stream, erro)
+                        return
+                    with trava:
+                        df_anterior = df
+                        novo_df, acao, mensagem_chat = aplicar_resposta(df, resposta)
+                        if acao in (0, 1):
+                            # Só troca o df depois de salvar, para a tela não mostrar algo que não está no arquivo
+                            aplicar_alteracao(novo_df)
+                            desfazer = desfazer_para(df_anterior, df)
+                            atualizar()
 
-                if acao in (0, 1):
-                    # Só troca o df depois de salvar, para a tela não mostrar algo que não está no arquivo
-                    aplicar_alteracao(novo_df)
-                    digitar(txt_stream, mensagem_chat, VERDE if acao == 1 else ft.Colors.WHITE)
-                    botao_desfazer_chat(conteudo, desfazer_para(df_anterior, df))
-                else:
-                    digitar(txt_stream, mensagem_chat)
-                page.update()
-            except Exception as exc:
-                txt_stream.value = f"Erro ao processar: {exc}"
-                txt_stream.color = VERMELHO
-                page.update()
+                    if acao in (0, 1):
+                        digitar(txt_stream, mensagem_chat, VERDE if acao == 1 else ft.Colors.WHITE)
+                        with trava:
+                            botao_desfazer_chat(conteudo, desfazer)
+                    else:
+                        digitar(txt_stream, mensagem_chat)
+                    atualizar()
+                except PermissionError as exc:
+                    txt_stream.value = str(exc)
+                    txt_stream.color = VERMELHO
+                    atualizar()
+                except Exception as exc:
+                    print("Erro ao processar mensagem:", repr(exc))
+                    txt_stream.value = "Algo deu errado ao processar essa mensagem. Tente de novo."
+                    txt_stream.color = VERMELHO
+                    atualizar()
 
         threading.Thread(target=processar_ia, daemon=True).start()
 
@@ -1292,6 +1822,11 @@ Registros:
     # Apertar "Enter" no campo de texto também envia
     campo_mensagem.on_submit = enviar_mensagem
 
+    # No celular o menu lateral some, então o botão de análise também fica no topo do chat
+    botao_analise_chat = ft.IconButton(icon=ft.Icons.AUTO_AWESOME, icon_color=VERDE, icon_size=26,
+                                       tooltip="Analisar meus gastos", on_click=analisar_gastos,
+                                       visible=False)
+
     coluna_chat = ft.Container(
         content=ft.Column(
             controls=[
@@ -1299,7 +1834,9 @@ Registros:
                     ft.Column([
                         ft.Row([
                             ft.Text("Assistente", size=fonte+15, weight="bold", color=ft.Colors.WHITE),
-                            ft.Icon(ft.Icons.AUTO_AWESOME, size=30, color=VERDE)
+                            ft.Icon(ft.Icons.AUTO_AWESOME, size=30, color=VERDE),
+                            ft.Container(expand=True),
+                            botao_analise_chat,
                         ]),
                         ft.Text("Registre gastos e tire dúvidas conversando", size=fonte+1, color=TEXTO_SECUNDARIO),
                     ], spacing=0),
@@ -1309,8 +1846,7 @@ Registros:
                 ft.Row([campo_mensagem, botao_enviar]) # Fica na base do chat
             ],
         ),
-        width=375,
-        expand=2, # Ocupa 2 partes do espaço
+        width=360,  # Ajustada por aplicar_layout()
         padding=10,
         bgcolor=AZUL_PAINEL,
         border=ft.Border.all(1, AZUL_BORDA),
@@ -1331,8 +1867,87 @@ Registros:
         expand=True # Faz a linha ocupar 100% da altura da tela
     )
 
+    # Barra de navegação de baixo, usada só no celular (no lugar do menu lateral)
+    barra_navegacao = ft.NavigationBar(
+        destinations=[
+            ft.NavigationBarDestination(icon=ft.Icons.DASHBOARD, label="Visão geral"),
+            ft.NavigationBarDestination(icon=ft.Icons.VIEW_AGENDA, label="Extrato"),
+            ft.NavigationBarDestination(icon=ft.Icons.RECEIPT_LONG, label="Lançamentos"),
+            ft.NavigationBarDestination(icon=ft.Icons.AUTO_AWESOME, label="Assistente"),
+        ],
+        selected_index=0,
+        bgcolor=AZUL_PAINEL,
+        indicator_color=ft.Colors.with_opacity(0.2, VERDE),
+        on_change=lambda e: mostrar_visao(VISOES_CELULAR[e.control.selected_index]),
+    )
+
+    # ==========================================
+    # LAYOUT RESPONSIVO
+    # ==========================================
+    layout_atual = None
+
+    def tipo_de_layout(largura):
+        if largura < LARGURA_CELULAR:
+            return "celular"
+        return "compacto" if largura < LARGURA_COMPACTA else "largo"
+
+    @com_trava
+    def aplicar_layout(largura):
+        # largo: menu completo + tela + chat | compacto: menu só com ícones | celular: uma tela por vez
+        nonlocal modo_celular, layout_atual
+        layout_atual = tipo_de_layout(largura)
+        celular = layout_atual == "celular"
+        compacto = layout_atual == "compacto"
+        modo_celular = celular
+
+        # Menu lateral
+        alinhamento = ft.MainAxisAlignment.CENTER if compacto else ft.MainAxisAlignment.START
+        coluna_botoes.width = 96 if compacto else 375
+        coluna_botoes.padding = 14 if compacto else 20
+        linha_marca.alignment = alinhamento
+        for item in [nome_marca, dica_menu, texto_analise] + titulos_menu:
+            item.visible = not compacto
+        for botao in list(botoes_nav.values()) + [botao_analise]:
+            botao.content.alignment = alinhamento
+            botao.padding = ft.Padding.symmetric(horizontal=0 if compacto else 18)
+        for botao in botoes_nav.values():
+            botao.content.controls[1].visible = not compacto
+
+        # Chat: largura fixa ao lado da tela, ou a tela inteira no celular
+        coluna_chat.width = None if celular else 360
+        coluna_chat.expand = True if celular else None
+        botao_analise_chat.visible = celular
+
+        # Ajustes de tamanho para caber numa tela de celular
+        page.padding = 8 if celular else 20
+        page.navigation_bar = barra_navegacao if celular else None
+        titulo_tela.size = fonte + (9 if celular else 15)
+        texto_mes_extrato.width = 180 if celular else 230
+        for texto in (texto_salario, texto_reserva, texto_renda, texto_aporte):
+            texto.size = fonte + (9 if celular else 17)
+        for cartao, altura in cards_altura_fixa:
+            cartao.height = None if celular else altura
+
+        if celular:
+            layout_principal.controls = [coluna_chat if visao_atual == "chat" else tela_central]
+            barra_navegacao.selected_index = VISOES_CELULAR.index(visao_atual)
+        else:
+            layout_principal.controls = [coluna_botoes, tela_central, coluna_chat]
+            if visao_atual == "chat":
+                mostrar_visao("informacoes", atualizar_pagina=False)
+
+    def mudou_tamanho(e):
+        # Só refaz o layout quando ele muda de tipo, não a cada pixel
+        if tipo_de_layout(e.width) != layout_atual:
+            aplicar_layout(e.width)
+            atualizar()
+
+    page.on_resize = mudou_tamanho
+
     # Prepara as duas telas antes de exibir; a Visão geral é a tela inicial
+    aplicar_layout(page.width or LARGURA_COMPACTA)
     recarregar_tabela()
+    recarregar_extrato()
     mostrar_visao("informacoes", atualizar_pagina=False)
 
     page.add(layout_principal)
