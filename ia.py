@@ -59,7 +59,7 @@ load_dotenv()
 IP_DESKTOP = os.getenv("IP_DESKTOP", "127.0.0.1") 
 OLLAMA_URL = f"http://{IP_DESKTOP}:11434/api/chat"
 
-def Gemma4(prompt: str, num_predict: int = 300, stream: bool = False, formato: str | None = None, temperatura: float | None = None):
+def Gemma4(prompt: str, num_predict: int = 300, stream: bool = False, formato: str | dict | None = None, temperatura: float | None = None):
 
     # Montamos o corpo da requisição idêntico à documentação da API REST do Ollama
     payload = {
@@ -86,10 +86,12 @@ def Gemma4(prompt: str, num_predict: int = 300, stream: bool = False, formato: s
         "options": {
             "num_predict": num_predict
         },
-        "stream": stream
+        "stream": stream,
+        "think": False
     }
 
-    # formato="json" força o Ollama a devolver um JSON válido (usado na extração de registros)
+    # formato="json" força o Ollama a devolver um JSON válido; um dict (JSON Schema) força também
+    # o formato exato dos campos (usado na extração de registros)
     if formato:
         payload["format"] = formato
     if temperatura is not None:
